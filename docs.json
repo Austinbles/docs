@@ -76,13 +76,17 @@
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.ndapi.io"
+      "label": "Book a Demo",
+      "href": "mailto:sales@nolubz.com?subject=NDAPI%20Demo%20Request"
     }
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/ndapi"
+      "x": "https://x.com/nolubz"
     }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
   }
 }
