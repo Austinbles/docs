@@ -1,0 +1,150 @@
+---
+title: "NDAPI API Error Codes and HTTP Status Code Reference"
+sidebarTitle: "Errors"
+description: "Complete reference for NDAPI HTTP status codes and application-level error codes, including causes, error response structure, and recommended actions."
+---
+
+When a request cannot be completed, NDAPI returns a structured error response that includes both an HTTP status code and a machine-readable application error code. This two-level system lets you handle errors programmatically — branch on the `code` field in your application logic, log the `message` field for human review, and map HTTP status codes to your existing retry and alerting infrastructure.
+
+## Error Response Structure
+
+All error responses follow the standard envelope format, with a top-level `status` of `"error"` and an `error` object in place of `data`:
+
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The 'amount' field must be a positive number.",
+    "details": [
+      {
+        "field": "amount",
+        "issue": "Must be greater than 0"
+      }
+    ]
+  }
+}
+```
+
+The `details` array is included on `VALIDATION_ERROR` responses to pinpoint which fields failed validation. It is omitted on all other error types.
+
+<ResponseField name="status" type="string">
+  Always `"error"` for error responses.
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Container for error information.
+  <Expandable title="error fields">
+    <ResponseField name="error.code" type="string">
+      Machine-readable application error code. Use this in your `switch` or `if` logic.
+    </ResponseField>
+    <ResponseField name="error.message" type="string">
+      Human-readable description of what went wrong. Suitable for logging; do not display raw API messages directly to end users.
+    </ResponseField>
+    <ResponseField name="error.details" type="array">
+      Present only on `VALIDATION_ERROR`. Each item has a `field` string and an `issue` string.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## HTTP Status Codes
+
+| Code | Meaning | When it occurs |
+|------|---------|----------------|
+| `200 OK` | Request succeeded | The resource was fetched or updated successfully |
+| `201 Created` | Resource created | A new resource (e.g. a transfer or virtual account) was created |
+| `400 Bad Request` | Invalid request | Request body is malformed, missing required fields, or fails validation |
+| `401 Unauthorized` | Authentication failed | API key is missing, invalid, or revoked |
+| `403 Forbidden` | Authorization failed | Key is valid but lacks permission to perform this action |
+| `404 Not Found` | Resource missing | The requested resource ID does not exist or is not accessible by your key |
+| `409 Conflict` | Duplicate request | A resource with the provided `reference` already exists |
+| `422 Unprocessable Entity` | Business rule violation | Request is valid but cannot be processed (e.g. insufficient balance) |
+| `429 Too Many Requests` | Rate limit exceeded | Your key has sent more than 100 requests in the current minute window |
+| `500 Internal Server Error` | Server error | An unexpected error occurred on NDAPI's side |
+| `503 Service Unavailable` | Temporarily unavailable | The service is under maintenance or experiencing degraded availability |
+
+## Application Error Codes
+
+| Error Code | HTTP Status | Description | Recommended Action |
+|------------|-------------|-------------|--------------------|
+| `MISSING_API_KEY` | `401` | No `Authorization` header was sent with the request | Add the `Authorization: Bearer <key>` header to every request |
+| `INVALID_API_KEY` | `401` | The API key was not found or has been revoked | Verify the key value and environment; generate a replacement key if needed |
+| `INSUFFICIENT_PERMISSIONS` | `403` | The key exists but does not have the scope required for this operation | Use a key with the correct permission scope, or update key permissions in the dashboard |
+| `VALIDATION_ERROR` | `400` | One or more request fields failed validation | Inspect the `details` array for the specific fields and issues; fix the request before retrying |
+| `RESOURCE_NOT_FOUND` | `404` | The specified resource ID does not exist in your account | Confirm the ID is correct and belongs to your account |
+| `DUPLICATE_REFERENCE` | `409` | A request with this `reference` value was already processed | If you intended idempotency, read the original response; otherwise use a new unique `reference` |
+| `INSUFFICIENT_BALANCE` | `422` | Your wallet does not have enough funds to complete the transfer | Top up your wallet balance before retrying |
+| `INVALID_ACCOUNT_DETAILS` | `422` | The bank account or mobile money details provided could not be validated | Double-check the account number, bank code, and account name; re-run account verification |
+| `VIRTUAL_ACCOUNT_SUSPENDED` | `422` | The virtual account targeted by this request has been suspended | Contact NDAPI support to review and reinstate the account |
+| `TRANSFER_LIMIT_EXCEEDED` | `422` | The requested transfer amount exceeds your account's per-transaction or daily limit | Split the transfer into smaller amounts or request a limit increase from NDAPI support |
+| `RATE_LIMIT_EXCEEDED` | `429` | Your API key has exceeded 100 requests per minute | Wait until the timestamp in `X-RateLimit-Reset`, then retry with exponential backoff |
+| `INTERNAL_ERROR` | `500` | An unexpected server-side error occurred | Retry with exponential backoff; if the issue persists, contact NDAPI support with the request ID |
+
+<Note>
+  **5xx errors** (`500`, `503`) are server-side and are safe to retry using exponential backoff with jitter. **4xx errors** (except `429`) indicate a problem with your request and should not be retried blindly — fix the underlying issue first. A `429` response should be retried after the window resets (see `X-RateLimit-Reset`).
+</Note>
+
+## Handling Errors in Code
+
+<CodeGroup>
+
+```bash curl
+# A request with a missing required field
+curl --request POST \
+  --url https://api.ndapi.io/v1/transfers \
+  --header "Authorization: Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "currency": "NGN"
+  }'
+
+# Response (400 Bad Request):
+# {
+#   "status": "error",
+#   "error": {
+#     "code": "VALIDATION_ERROR",
+#     "message": "Validation failed for 1 field(s).",
+#     "details": [
+#       { "field": "amount", "issue": "Required field is missing" }
+#     ]
+#   }
+# }
+```
+
+```javascript Node.js
+async function createTransfer(payload) {
+  const response = await fetch("https://api.ndapi.io/v1/transfers", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await response.json();
+
+  if (!response.ok) {
+    const { code, message, details } = body.error;
+
+    switch (code) {
+      case "INSUFFICIENT_BALANCE":
+        throw new Error("Top up your wallet before retrying.");
+      case "DUPLICATE_REFERENCE":
+        console.warn("Already processed — returning existing result.");
+        return body; // treat as success for idempotent callers
+      case "VALIDATION_ERROR":
+        console.error("Validation issues:", details);
+        throw new Error(message);
+      case "RATE_LIMIT_EXCEEDED":
+        throw new Error("Rate limit hit — back off and retry.");
+      default:
+        throw new Error(`API error ${code}: ${message}`);
+    }
+  }
+
+  return body.data;
+}
+```
+
+</CodeGroup>

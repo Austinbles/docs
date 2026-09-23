@@ -1,0 +1,166 @@
+---
+title: "Pagination in the NDAPI — Page Through List Responses"
+sidebarTitle: "Pagination"
+description: "NDAPI list endpoints use page-number pagination. Learn how to use the page and per_page parameters to navigate and retrieve large result sets."
+---
+
+All NDAPI endpoints that return lists of resources — such as transactions, virtual accounts, and transfers — are paginated. Rather than returning every record in a single response, the API returns a fixed-size page of results along with metadata that tells you how many total records exist and how to fetch the next page. This keeps response times predictable and prevents your application from processing unexpectedly large payloads.
+
+## Pagination Type
+
+NDAPI uses **page-number pagination** controlled by two query parameters: `page` and `per_page`. You specify which page you want and how many records to include per page. The API returns the requested slice of results along with a `meta` object you can use to iterate through all pages.
+
+## Paginated Response Envelope
+
+List endpoints wrap results in the standard envelope and add a `meta` object at the top level:
+
+```json
+{
+  "status": "success",
+  "data": [ ... ],
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total": 342,
+    "total_pages": 18
+  }
+}
+```
+
+<ResponseField name="data" type="array">
+  The array of resource objects for the current page.
+</ResponseField>
+
+<ResponseField name="meta" type="object">
+  Pagination metadata for the current response.
+  <Expandable title="meta fields">
+    <ResponseField name="meta.page" type="integer">
+      The current page number (1-indexed).
+    </ResponseField>
+    <ResponseField name="meta.per_page" type="integer">
+      The number of records returned per page for this response.
+    </ResponseField>
+    <ResponseField name="meta.total" type="integer">
+      The total number of records matching the request across all pages.
+    </ResponseField>
+    <ResponseField name="meta.total_pages" type="integer">
+      The total number of pages available given the current `per_page` value.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  The page number to retrieve. Pages are 1-indexed — `page=1` returns the first page of results. If the requested page exceeds `total_pages`, an empty `data` array is returned.
+</ParamField>
+
+<ParamField query="per_page" type="integer" default="20">
+  The number of records to return per page. Minimum value is `1`; maximum value is `100`. Requests with `per_page` greater than `100` will return a `400 VALIDATION_ERROR`.
+</ParamField>
+
+## Example Paginated Request
+
+The following example fetches the second page of transactions, with 50 records per page.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url "https://api.ndapi.io/v1/transactions?page=2&per_page=50" \
+  --header "Authorization: Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx"
+```
+
+```javascript Node.js
+const response = await fetch(
+  "https://api.ndapi.io/v1/transactions?page=2&per_page=50",
+  {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx",
+    },
+  }
+);
+
+const { status, data, meta } = await response.json();
+
+console.log(`Page ${meta.page} of ${meta.total_pages}`);
+console.log(`Showing ${data.length} of ${meta.total} transactions`);
+```
+
+</CodeGroup>
+
+A typical response looks like this:
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "txn_01HX9ZK2QP",
+      "type": "credit",
+      "amount": 15000.00,
+      "currency": "NGN",
+      "reference": "PAY-20240601-001",
+      "created_at": "2024-06-01T14:22:00Z"
+    }
+  ],
+  "meta": {
+    "page": 2,
+    "per_page": 50,
+    "total": 342,
+    "total_pages": 7
+  }
+}
+```
+
+## Fetching All Pages
+
+To retrieve every record across all pages, loop until you have consumed the last page. Check `meta.page < meta.total_pages` to determine whether more pages remain.
+
+<CodeGroup>
+
+```bash curl
+# Fetch page 1
+curl --request GET \
+  --url "https://api.ndapi.io/v1/transactions?page=1&per_page=100" \
+  --header "Authorization: Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx"
+
+# Fetch page 2 (repeat until meta.page == meta.total_pages)
+curl --request GET \
+  --url "https://api.ndapi.io/v1/transactions?page=2&per_page=100" \
+  --header "Authorization: Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx"
+```
+
+```javascript Node.js
+async function fetchAllTransactions() {
+  const allTransactions = [];
+  let page = 1;
+  let totalPages = 1; // updated after the first response
+
+  do {
+    const response = await fetch(
+      `https://api.ndapi.io/v1/transactions?page=${page}&per_page=100`,
+      {
+        headers: {
+          Authorization: "Bearer ndapi_live_xxxxxxxxxxxxxxxxxxxx",
+        },
+      }
+    );
+
+    const { data, meta } = await response.json();
+
+    allTransactions.push(...data);
+    totalPages = meta.total_pages;
+    page += 1;
+  } while (page <= totalPages);
+
+  return allTransactions;
+}
+```
+
+</CodeGroup>
+
+<Tip>
+  Use `meta.page < meta.total_pages` as your loop condition when fetching all pages programmatically. Once `meta.page` equals `meta.total_pages`, you have retrieved every record. Set `per_page=100` to minimise the number of requests needed for large datasets.
+</Tip>

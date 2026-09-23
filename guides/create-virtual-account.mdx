@@ -1,0 +1,185 @@
+---
+title: "Create and Manage Customer Virtual Accounts in NDAPI"
+sidebarTitle: "Virtual Accounts"
+description: "Step-by-step guide to creating virtual accounts in NDAPI, assigning them to customers, and handling incoming payment notifications."
+---
+
+Virtual accounts let you assign a unique bank account number to each of your customers so that incoming payments are automatically attributed to the right record in your system. NDAPI provisions these accounts instantly and notifies your application via webhooks whenever a credit arrives — no manual reconciliation required.
+
+## Creating a Virtual Account
+
+<Steps>
+
+  <Step title="Ensure you have a valid API key">
+    All NDAPI requests must be authenticated with a Bearer token. If you haven't generated an API key yet, head to the [Authentication guide](/authentication) to get set up. Keep your key secure and never expose it in client-side code.
+  </Step>
+
+  <Step title="Create the virtual account">
+    Send a `POST` request to `/virtual-accounts` with the customer details and your own unique reference for the account.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl --request POST \
+      --url https://api.ndapi.io/v1/virtual-accounts \
+      --header 'Authorization: Bearer YOUR_API_KEY' \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "currency": "NGN",
+        "customer_name": "Amara Okafor",
+        "customer_email": "amara@example.com",
+        "reference": "VA-001",
+        "metadata": {
+          "internal_user_id": "usr_8821"
+        }
+      }'
+    ```
+
+    ```javascript Node.js
+    const response = await fetch('https://api.ndapi.io/v1/virtual-accounts', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currency: 'NGN',
+        customer_name: 'Amara Okafor',
+        customer_email: 'amara@example.com',
+        reference: 'VA-001',
+        metadata: {
+          internal_user_id: 'usr_8821',
+        },
+      }),
+    });
+
+    const { status, data } = await response.json();
+
+    if (status !== 'success') {
+      throw new Error(`Virtual account creation failed: ${data.message}`);
+    }
+
+    console.log('Virtual account created:', data.account_number);
+    ```
+
+    </CodeGroup>
+
+    ### Request body parameters
+
+    <ParamField body="currency" type="string" required>
+      ISO 4217 currency code for the virtual account, e.g. `"NGN"`. Contact support for the full list of supported currencies in your region.
+    </ParamField>
+
+    <ParamField body="customer_name" type="string" required>
+      Full name of the customer who will use this account. This name typically appears on the beneficiary's bank statement.
+    </ParamField>
+
+    <ParamField body="customer_email" type="string" required>
+      Email address of the customer. Used for notifications and account recovery.
+    </ParamField>
+
+    <ParamField body="reference" type="string" required>
+      Your own unique identifier for this virtual account. Must be unique across your integration. Use this to correlate the account with your internal records.
+    </ParamField>
+
+    <ParamField body="metadata" type="object">
+      Any additional key-value pairs you want to attach to this account. NDAPI stores and returns this object as-is — useful for linking to internal IDs or tagging accounts.
+    </ParamField>
+
+  </Step>
+
+  <Step title="Store the returned account details">
+    On success, NDAPI returns a full account object. Persist the `id`, `account_number`, `bank_code`, and `bank_name` in your database — you'll need them to display payment instructions and to look up the account later.
+
+    ```json Sample response
+    {
+      "status": "success",
+      "data": {
+        "id": "va_01HXYZ456",
+        "account_number": "7820001234",
+        "account_name": "NDAPI/Amara Okafor",
+        "bank_name": "Wema Bank",
+        "bank_code": "035",
+        "currency": "NGN",
+        "status": "active",
+        "customer_name": "Amara Okafor",
+        "customer_email": "amara@example.com",
+        "reference": "VA-001",
+        "created_at": "2024-01-15T10:00:00Z"
+      }
+    }
+    ```
+
+    <Tip>
+      Always index on the `reference` field in your own database. When NDAPI sends a `virtual_account.credited` webhook, the event payload includes the `reference` you supplied — making it trivial to look up the customer record without an extra API call.
+    </Tip>
+  </Step>
+
+  <Step title="Share account details with your customer">
+    Display the `account_number`, `bank_name`, and `account_name` to your customer so they can make a payment. A typical UI shows something like:
+
+    > **Bank:** Wema Bank  
+    > **Account number:** 7820001234  
+    > **Account name:** NDAPI/Amara Okafor  
+
+    The customer uses this information exactly as they would any normal Nigerian bank account number.
+  </Step>
+
+  <Step title="Listen for credits via webhook">
+    Whenever a payment lands on the virtual account, NDAPI fires a `virtual_account.credited` webhook event to your registered endpoint. The event payload includes the amount received, the virtual account `id`, and your original `reference`.
+
+    ```json virtual_account.credited payload
+    {
+      "event": "virtual_account.credited",
+      "id": "evt_01HABC111",
+      "data": {
+        "virtual_account_id": "va_01HXYZ456",
+        "reference": "VA-001",
+        "amount": 15000.00,
+        "currency": "NGN",
+        "sender_name": "John Buyer",
+        "credited_at": "2024-01-15T14:23:00Z"
+      }
+    }
+    ```
+
+    See the [Webhooks guide](/guides/handle-webhooks) for full details on registering your endpoint and verifying event signatures.
+  </Step>
+
+</Steps>
+
+---
+
+## Retrieving a Virtual Account
+
+You can fetch the current state of any virtual account at any time using its `id`.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://api.ndapi.io/v1/virtual-accounts/va_01HXYZ456 \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```javascript Node.js
+const response = await fetch(
+  'https://api.ndapi.io/v1/virtual-accounts/va_01HXYZ456',
+  {
+    headers: {
+      Authorization: 'Bearer YOUR_API_KEY',
+    },
+  }
+);
+
+const { status, data } = await response.json();
+console.log('Account status:', data.status);
+```
+
+</CodeGroup>
+
+The response mirrors the creation response. Check the `status` field — an account may be `active`, `suspended`, or `closed`. If an account is `suspended`, no further credits will be processed until it is reactivated. Contact [NDAPI support](https://dashboard.ndapi.io/support) to resolve a suspension.
+
+<Note>
+  Virtual account IDs are immutable and never reused. Always store the full `id` (e.g. `va_01HXYZ456`) alongside your internal record — avoid relying solely on `account_number` for lookups, as the same account number could theoretically be recycled by the issuing bank in the distant future.
+</Note>

@@ -1,0 +1,53 @@
+---
+title: "NDAPI: Payment Infrastructure for African Fintech Operators"
+sidebarTitle: "Introduction"
+description: "Learn what NDAPI is, what problems it solves for African fintech operators, and how its five core capabilities work together in one integration."
+---
+
+NDAPI is a unified REST API designed specifically for fintech operators building payment products across Africa. Instead of integrating with a different payment provider in every country you expand into, NDAPI gives you a single API surface that abstracts the underlying banking rails, local compliance requirements, and currency differences into one consistent developer experience. You authenticate once, learn one set of endpoints, and gain access to virtual account issuance, outbound money transfers, real-time balance queries, full transaction history, and webhook-driven event notifications — all from a single integration.
+
+## Core capabilities
+
+NDAPI is organized around five primary capabilities that cover the full lifecycle of a payment operation. **Virtual accounts** let you issue dedicated bank account numbers to individual customers or business entities, enabling you to collect inbound payments and reconcile them automatically by reference. **Money transfers** give you a single endpoint to send funds to any bank account in a supported market, with built-in idempotency so you never accidentally pay twice. **Balance queries** return your real-time available and ledger balance for any currency, giving your platform accurate financial visibility at all times. **Transaction history** lets you fetch, filter, and paginate every debit and credit that has passed through your account, making reconciliation and customer support dramatically simpler. Finally, **webhook events** push real-time status updates to your server the moment something changes — a transfer settles, a collection arrives, or a payment fails — so your product reacts instantly without polling.
+
+<CardGroup cols={2}>
+  <Card title="Virtual Accounts" icon="wallet" href="/api-reference/virtual-accounts">
+    Issue unique account numbers per customer and automatically reconcile inbound collections against them.
+  </Card>
+  <Card title="Money Transfers" icon="arrow-right-arrow-left" href="/api-reference/transfers">
+    Initiate outbound bank transfers with idempotent references and real-time status tracking.
+  </Card>
+  <Card title="Balance & Transactions" icon="scale-balanced" href="/api-reference/balance">
+    Query live balances and paginate through full transaction history across all currencies.
+  </Card>
+  <Card title="Webhook Events" icon="bell" href="/guides/handle-webhooks">
+    Subscribe to payment events and receive instant HTTP notifications to your endpoint.
+  </Card>
+</CardGroup>
+
+## Supported markets and currencies {#supported-markets}
+
+NDAPI is built for African fintech from the ground up. Rather than retrofitting a global payments platform, every design decision — from account number formats to settlement windows — reflects the realities of operating on the continent. The table below shows the currently supported markets and their corresponding currencies.
+
+| Market       | Currency | Code  |
+|--------------|----------|-------|
+| Nigeria      | Naira    | NGN   |
+| Ghana        | Cedi     | GHS   |
+| Kenya        | Shilling | KES   |
+| South Africa | Rand     | ZAR   |
+
+Additional markets are added regularly. Contact [support@ndapi.io](mailto:support@ndapi.io) or check the [NDAPI dashboard](https://dashboard.ndapi.io) for the latest list of supported countries and their available transfer rails.
+
+## Base URL
+
+All API requests are made over HTTPS to the following base URL:
+
+```
+https://api.ndapi.io/v1
+```
+
+Every endpoint documented in this reference is relative to this base. For example, the balance endpoint is available at `https://api.ndapi.io/v1/balance`. If you are testing your integration before going live, use the sandbox base URL instead — see the [Authentication](/authentication#environments) page for details.
+
+<Note>
+  You need an API key to authenticate every request to NDAPI. Head to the [Authentication](/authentication) page to learn how to create your key, pass it in request headers, and keep it secure.
+</Note>

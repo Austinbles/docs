@@ -1,0 +1,90 @@
+{
+  "projectType": "api-service",
+  "projectName": "NDAPI",
+  "projectDescription": "NDAPI is a payment infrastructure API for African fintech operators, enabling virtual accounts, money transfers, webhook notifications, balance queries, and transaction management.",
+  "theme": "luma",
+  "primaryColor": "#ef7025",
+  "lightColor": "#eec9bc",
+  "darkColor": "#4fa1ab",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/virtual-accounts",
+              "concepts/transfers",
+              "concepts/transactions",
+              "concepts/webhooks"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/create-virtual-account",
+              "guides/initiate-transfer",
+              "guides/handle-webhooks",
+              "guides/error-handling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/authentication",
+              "api-reference/errors",
+              "api-reference/pagination"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api-reference/virtual-accounts",
+              "api-reference/transfers",
+              "api-reference/transactions",
+              "api-reference/balance",
+              "api-reference/webhooks"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Virtual account creation and management",
+    "Domestic and cross-border money transfers",
+    "Real-time webhook event notifications",
+    "Account balance and transaction history",
+    "Multi-currency support for African markets",
+    "Secure API key authentication",
+    "Idempotent requests for safe retries",
+    "Detailed error codes and error handling"
+  ],
+  "publicApiSurface": [
+    "POST /virtual-accounts — Create a virtual account",
+    "GET /virtual-accounts/:id — Retrieve a virtual account",
+    "POST /transfers — Initiate a transfer",
+    "GET /transfers/:id — Get transfer status",
+    "GET /transactions — List transactions",
+    "GET /transactions/:id — Get transaction details",
+    "GET /balance — Retrieve account balance",
+    "POST /webhooks — Register a webhook endpoint",
+    "GET /webhooks — List webhook subscriptions",
+    "DELETE /webhooks/:id — Remove a webhook"
+  ]
+}

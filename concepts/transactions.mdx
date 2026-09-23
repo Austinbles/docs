@@ -1,0 +1,141 @@
+---
+title: "Transactions: Credits, Debits, and Your NDAPI Ledger"
+sidebarTitle: "Transactions"
+description: "Every credit and debit in NDAPI is recorded as an immutable transaction. Learn about types, balance_before/after fields, and filtering parameters."
+---
+
+Transactions are NDAPI's unified record of every payment event that affects your account balance. Whether money flows into one of your virtual accounts from a customer payment, or flows out through a transfer you initiate, a corresponding transaction is created and permanently stored in your ledger. Transactions are the single source of truth for reconciliation, financial reporting, and auditing — giving you a complete, chronologically ordered history of all activity across your NDAPI integration.
+
+## Transaction Types
+
+Every transaction belongs to one of two types, reflecting the direction of money movement:
+
+<CardGroup cols={2}>
+  <Card title="credit" icon="arrow-down-to-line">
+    Money received into one of your virtual accounts. Credits are created automatically whenever a virtual account receives an inbound payment. The associated `virtual_account_id` will reference the receiving account.
+  </Card>
+  <Card title="debit" icon="arrow-up-from-line">
+    Money sent out via a transfer you initiated. Debits are created when a transfer moves from `pending` to `processing`. The associated `transfer_id` will reference the originating transfer.
+  </Card>
+</CardGroup>
+
+## Transaction Object
+
+The following fields are present on every transaction object returned by the NDAPI API.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique identifier for the transaction, prefixed with `txn_`. |
+| `type` | string | Direction of the transaction: `credit` or `debit`. |
+| `amount` | number | Transaction amount in the smallest currency unit (e.g. kobo for NGN). |
+| `currency` | string | ISO 4217 currency code (e.g. `NGN`, `KES`). |
+| `status` | string | Current status of the transaction: `pending`, `success`, or `failed`. |
+| `reference` | string | Unique reference for this transaction, linking it to the originating payment or transfer. |
+| `description` | string | Human-readable description of the transaction (e.g. narration from the sender or your transfer memo). |
+| `balance_before` | number | Your NDAPI wallet balance immediately before this transaction was applied. |
+| `balance_after` | number | Your NDAPI wallet balance immediately after this transaction was applied. |
+| `virtual_account_id` | string \| null | The ID of the virtual account that received the payment. Populated for `credit` transactions; `null` for debits. |
+| `transfer_id` | string \| null | The ID of the transfer that originated this transaction. Populated for `debit` transactions; `null` for credits. |
+| `created_at` | string | ISO 8601 timestamp of when the transaction was recorded. |
+
+A complete transaction object looks like this:
+
+```json
+{
+  "id": "txn_01HPQR567LMN",
+  "type": "credit",
+  "amount": 150000,
+  "currency": "NGN",
+  "status": "success",
+  "reference": "TXN-20240115-004",
+  "description": "Payment from Emeka Eze via First Bank",
+  "balance_before": 4200000,
+  "balance_after": 4350000,
+  "virtual_account_id": "va_01HXYZ456ABC",
+  "transfer_id": null,
+  "created_at": "2024-01-15T14:22:11Z"
+}
+```
+
+## Transactions Are Immutable
+
+Once a transaction has been created by NDAPI, it cannot be modified, edited, or deleted — by you or by NDAPI. This immutability is by design: it ensures your ledger is a tamper-proof audit trail that accurately reflects what happened and when. If a transfer fails and funds are returned to your balance, NDAPI creates a new reversal transaction rather than modifying the original debit. This means your full financial history is always preserved.
+
+## Filtering Transactions
+
+You can query your transaction history with precision using the following query parameters on the `GET /v1/transactions` endpoint:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `type` | string | Filter by transaction type: `credit` or `debit`. |
+| `status` | string | Filter by status: `pending`, `success`, or `failed`. |
+| `currency` | string | Filter by ISO 4217 currency code (e.g. `NGN`). |
+| `date_from` | string | Return only transactions created on or after this ISO 8601 timestamp. |
+| `date_to` | string | Return only transactions created on or before this ISO 8601 timestamp. |
+
+For example, to retrieve all successful NGN credits from a specific date range:
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url "https://api.ndapi.io/v1/transactions?type=credit&status=success&currency=NGN&date_from=2024-01-01T00:00:00Z&date_to=2024-01-31T23:59:59Z" \
+  --header "Authorization: Bearer YOUR_SECRET_KEY"
+```
+
+```javascript Node.js
+const response = await fetch(
+  "https://api.ndapi.io/v1/transactions?" +
+    new URLSearchParams({
+      type: "credit",
+      status: "success",
+      currency: "NGN",
+      date_from: "2024-01-01T00:00:00Z",
+      date_to: "2024-01-31T23:59:59Z",
+    }),
+  {
+    headers: {
+      Authorization: "Bearer YOUR_SECRET_KEY",
+    },
+  }
+);
+
+const { data, meta } = await response.json();
+```
+
+```python Python
+import requests
+
+params = {
+    "type": "credit",
+    "status": "success",
+    "currency": "NGN",
+    "date_from": "2024-01-01T00:00:00Z",
+    "date_to": "2024-01-31T23:59:59Z",
+}
+
+response = requests.get(
+    "https://api.ndapi.io/v1/transactions",
+    headers={"Authorization": "Bearer YOUR_SECRET_KEY"},
+    params=params,
+)
+
+result = response.json()
+```
+</CodeGroup>
+
+## Pagination
+
+<Note>
+  All transaction list endpoints in NDAPI are paginated. By default, each page returns up to 50 transactions sorted by `created_at` in descending order (most recent first). Use the `page` and `per_page` query parameters to navigate through results, and inspect the `meta` object in the response for `total`, `page`, `per_page`, and `total_pages` values. For large exports spanning thousands of transactions, consider using `date_from` and `date_to` to retrieve results in manageable date-bounded chunks.
+</Note>
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Transactions API Reference" icon="code" href="/api-reference/transactions">
+    Explore the full API reference for listing, retrieving, and filtering transactions.
+  </Card>
+  <Card title="Webhooks" icon="bolt" href="/concepts/webhooks">
+    Receive real-time notifications the moment a transaction is created, rather than polling.
+  </Card>
+</CardGroup>

@@ -1,0 +1,83 @@
+---
+title: "Account Balance API Reference — NDAPI Documentation"
+sidebarTitle: "Balance"
+description: "Retrieve your NDAPI account balance via the GET /balance endpoint. Returns available and ledger balance figures per currency with live examples."
+---
+
+Your NDAPI balance reflects the funds currently held in your integration's float. You can query it at any time to see two figures: the **available** balance, which represents funds you can spend right now, and the **ledger** balance, which is the broader total including transactions that are still settling. This endpoint is currency-scoped — if you operate across multiple currencies, query each one separately.
+
+---
+
+## GET /balance
+
+Retrieve the current balance for your NDAPI account. No request body or path parameters are required — simply call the endpoint with your API key and optionally specify a currency via a query parameter.
+
+### Query Parameters
+
+<ParamField query="currency" type="string">
+  ISO 4217 currency code to retrieve the balance for. One of `NGN`, `GHS`, `KES`, `ZAR`. Defaults to `NGN` if omitted.
+</ParamField>
+
+### Response Fields
+
+<ResponseField name="available" type="number">
+  Funds immediately available for you to initiate transfers or payouts, expressed in the major currency unit (e.g. Naira, not kobo).
+</ResponseField>
+
+<ResponseField name="ledger" type="number">
+  Total balance including funds that are in flight or pending settlement. This figure will always be greater than or equal to `available`.
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  The ISO 4217 currency code that this balance snapshot applies to.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url 'https://api.ndapi.io/v1/balance?currency=NGN' \
+  --header 'Authorization: Bearer <API_KEY>'
+```
+
+```javascript Node.js
+const params = new URLSearchParams({ currency: 'NGN' });
+
+const response = await fetch(
+  `https://api.ndapi.io/v1/balance?${params}`,
+  {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer <API_KEY>',
+    },
+  }
+);
+
+const data = await response.json();
+console.log(data);
+```
+
+</CodeGroup>
+
+**Example response**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "available": 150000.00,
+    "ledger": 152500.00,
+    "currency": "NGN"
+  }
+}
+```
+
+<Note>
+  The difference between `ledger` and `available` represents funds that are currently pending — for example, incoming credits that have been received but not yet fully settled, or outgoing transfers still being processed by the destination bank. Once these transactions reach a terminal state, the two figures will converge.
+</Note>
+
+<Tip>
+  Before initiating large transfers, always check that `available` is sufficient to cover the full amount plus any applicable fees. Attempting to transfer more than your available balance will result in a `400` error with code `insufficient_funds`.
+</Tip>
