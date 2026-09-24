@@ -1,0 +1,53 @@
+---
+title: "Collect a Payment"
+description: "Create a virtual account, share it with your customer and credit them when they pay."
+---
+
+## 1. Create the account
+
+Create one permanent account per customer for wallet funding, or one dynamic account per order for checkout.
+
+```javascript
+const res = await fetch("https://api.nolubz.com/v1/virtual-accounts", {
+  method: "POST",
+  headers: {
+    "x-api-key": process.env.NDAPI_API_KEY,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    account_name: "John Doe",
+    merchant_tx_ref: "ORDER-2026-001",      // your own ID
+    expires_at: "2026-12-31T23:59:59Z",     // omit for a permanent account
+  }),
+});
+const { data } = await res.json();
+```
+
+## 2. Show it to your customer
+
+Display `data.account_number`, `data.bank` and `data.account_name`. Save `merchant_tx_ref` against the order in your database.
+
+## 3. Credit the customer on `payment.received`
+
+```javascript
+if (event === "payment.received") {
+  const order = await findOrder(data.reference);
+  if (order && !order.paid) {
+    await creditCustomer(order.customerId, data.net_amount);
+    await markPaid(order.id, data.transaction_id);
+  }
+}
+```
+
+<Tip>
+  Check whether you've already processed `transaction_id` before crediting. Webhooks can arrive more than once.
+</Tip>
+
+## 4. Reconcile
+
+If you missed a webhook, look the payment up by your reference:
+
+```bash
+curl "https://api.nolubz.com/v1/transactions?reference=ORDER-2026-001" \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
+```

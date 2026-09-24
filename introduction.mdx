@@ -1,53 +1,90 @@
 ---
-title: "NDAPI: Payment Infrastructure for African Fintech Operators"
-sidebarTitle: "Introduction"
-description: "Learn what NDAPI is, what problems it solves for African fintech operators, and how its five core capabilities work together in one integration."
+title: "Introduction"
+description: "NDAPI is the Nolubz payment infrastructure API. Collect payments through virtual accounts, send bank transfers, and track every transaction in real time."
 ---
 
-NDAPI is a unified REST API designed specifically for fintech operators building payment products across Africa. Instead of integrating with a different payment provider in every country you expand into, NDAPI gives you a single API surface that abstracts the underlying banking rails, local compliance requirements, and currency differences into one consistent developer experience. You authenticate once, learn one set of endpoints, and gain access to virtual account issuance, outbound money transfers, real-time balance queries, full transaction history, and webhook-driven event notifications — all from a single integration.
+NDAPI (Nolubz Dedicated API Payment Infrastructure) gives your business direct access to Nolubz payment rails through one API. Collect payments through virtual accounts, verify bank account details, send bank transfers, and receive real-time webhook notifications for every event.
 
-## Core capabilities
+Whether you run a trading platform, a wallet, an escrow service, a school fee portal or any payment-enabled product, NDAPI provides the collection, payout and reconciliation layer so you can focus on your product.
 
-NDAPI is organized around five primary capabilities that cover the full lifecycle of a payment operation. **Virtual accounts** let you issue dedicated bank account numbers to individual customers or business entities, enabling you to collect inbound payments and reconcile them automatically by reference. **Money transfers** give you a single endpoint to send funds to any bank account in a supported market, with built-in idempotency so you never accidentally pay twice. **Balance queries** return your real-time available and ledger balance for any currency, giving your platform accurate financial visibility at all times. **Transaction history** lets you fetch, filter, and paginate every debit and credit that has passed through your account, making reconciliation and customer support dramatically simpler. Finally, **webhook events** push real-time status updates to your server the moment something changes — a transfer settles, a collection arrives, or a payment fails — so your product reacts instantly without polling.
+## How it works
+
+<Steps>
+  <Step title="Create a virtual account">
+    Generate a unique virtual account for each customer or each transaction, and share the account number with your customer.
+  </Step>
+  <Step title="Your customer pays">
+    Your customer sends a bank transfer to the virtual account. The payment is received in real time.
+  </Step>
+  <Step title="A webhook fires instantly">
+    NDAPI sends a `payment.received` webhook to your server with the full transaction details, including your own reference, so you can credit your customer immediately.
+  </Step>
+  <Step title="Withdraw your balance">
+    When you're ready to settle, send a bank transfer from your NDAPI balance to any supported bank account.
+  </Step>
+</Steps>
+
+## What you can do with NDAPI
 
 <CardGroup cols={2}>
   <Card title="Virtual Accounts" icon="wallet" href="/api-reference/virtual-accounts">
-    Issue unique account numbers per customer and automatically reconcile inbound collections against them.
+    Create permanent or single-use accounts to collect payments from your customers.
   </Card>
-  <Card title="Money Transfers" icon="arrow-right-arrow-left" href="/api-reference/transfers">
-    Initiate outbound bank transfers with idempotent references and real-time status tracking.
+  <Card title="Transfers" icon="arrow-right-arrow-left" href="/api-reference/transfers">
+    Send payouts to bank accounts, with account name verification before sending.
   </Card>
-  <Card title="Balance & Transactions" icon="scale-balanced" href="/api-reference/balance">
-    Query live balances and paginate through full transaction history across all currencies.
+  <Card title="Transactions" icon="receipt" href="/api-reference/transactions">
+    Look up your full transaction history, or find any single transaction by your reference.
   </Card>
-  <Card title="Webhook Events" icon="bell" href="/guides/handle-webhooks">
-    Subscribe to payment events and receive instant HTTP notifications to your endpoint.
+  <Card title="Balance" icon="scale-balanced" href="/api-reference/balance">
+    Check your available balance and totals at any time.
+  </Card>
+  <Card title="Webhooks" icon="bell" href="/concepts/webhooks">
+    Get signed, real-time notifications for payments, transfers and account events.
+  </Card>
+  <Card title="Test Mode" icon="flask" href="/quickstart">
+    Build and test your full integration safely before any real money moves.
   </Card>
 </CardGroup>
 
-## Supported markets and currencies {#supported-markets}
+## Supported markets
 
-NDAPI is built for African fintech from the ground up. Rather than retrofitting a global payments platform, every design decision — from account number formats to settlement windows — reflects the realities of operating on the continent. The table below shows the currently supported markets and their corresponding currencies.
+| Market | Collections | Payouts | Status |
+| --- | --- | --- | --- |
+| Nigeria | Bank transfer into virtual accounts | Commercial banks, microfinance banks and fintech banks | Live |
 
-| Market       | Currency | Code  |
-|--------------|----------|-------|
-| Nigeria      | Naira    | NGN   |
-| Ghana        | Cedi     | GHS   |
-| Kenya        | Shilling | KES   |
-| South Africa | Rand     | ZAR   |
+More markets are on the way. Contact us if you need a market that isn't listed yet.
 
-Additional markets are added regularly. Contact [support@ndapi.io](mailto:support@ndapi.io) or check the [NDAPI dashboard](https://dashboard.ndapi.io) for the latest list of supported countries and their available transfer rails.
+## Getting access
 
-## Base URL
+Access to NDAPI takes less than 24 hours.
 
-All API requests are made over HTTPS to the following base URL:
+<Steps>
+  <Step title="Contact us">
+    Email [ndapi.admin@nolubz.com](mailto:ndapi.admin@nolubz.com) with your business name, your use case and your expected monthly volume.
+  </Step>
+  <Step title="Sign the agreement">
+    We send you the NDAPI Service Agreement with your fee structure and terms.
+  </Step>
+  <Step title="Receive your credentials">
+    Within 24 hours you receive your test API key, live API key and webhook secret.
+  </Step>
+  <Step title="Go live">
+    Build and test with your `NDAPI-TEST-` key, then switch to your `NDAPI-LIVE-` key when you're ready.
+  </Step>
+</Steps>
 
-```
-https://api.ndapi.io/v1
-```
+## Fees
 
-Every endpoint documented in this reference is relative to this base. For example, the balance endpoint is available at `https://api.ndapi.io/v1/balance`. If you are testing your integration before going live, use the sandbox base URL instead — see the [Authentication](/authentication#environments) page for details.
+NDAPI fees are agreed individually with each operator during onboarding. There are no setup costs. To request a quote, email [ndapi.admin@nolubz.com](mailto:ndapi.admin@nolubz.com) with your expected volume and use case.
 
-<Note>
-  You need an API key to authenticate every request to NDAPI. Head to the [Authentication](/authentication) page to learn how to create your key, pass it in request headers, and keep it secure.
-</Note>
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Make your first API call in under 5 minutes.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn how to authenticate your requests with your API key.
+  </Card>
+</CardGroup>

@@ -1,0 +1,31 @@
+---
+title: "Transfers"
+description: "Send payouts from your NDAPI balance to bank accounts."
+---
+
+A transfer sends money from your NDAPI balance to a bank account. The recipient always receives the full `amount`. NDAPI charges are taken from your balance on top, so you stay in control of how you bill your own users:
+
+```
+net_amount     = amount                        (what the recipient receives)
+total_deducted = amount + fee + provider_fee   (what leaves your balance)
+```
+
+Your balance must cover `total_deducted`.
+
+## Transfer status
+
+| Status | Meaning |
+| --- | --- |
+| `completed` | Funds delivered to the recipient. |
+| `pending` | Accepted and awaiting processing. Watch for `transfer.success` or `transfer.failed`. |
+| `failed` | The transfer failed and your balance was restored automatically. |
+
+## Before you send
+
+Always verify the account name first with [Verify Account](/api-reference/virtual-accounts#verify-a-bank-account), and confirm it with your user.
+
+## Safe retries
+
+Every transfer needs a unique `reference`. If a request times out, retry with the **same** reference. A transfer is never processed twice. See [Error handling](/guides/error-handling#idempotency).
+
+See the [Transfers API](/api-reference/transfers).

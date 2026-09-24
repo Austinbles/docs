@@ -1,0 +1,50 @@
+---
+title: "Balance"
+description: "Get your available balance and totals."
+---
+
+`GET /balance`
+
+<CodeGroup>
+```bash cURL
+curl https://api.nolubz.com/v1/balance \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
+```
+
+```javascript Node.js
+const res = await fetch("https://api.nolubz.com/v1/balance", {
+  headers: { "x-api-key": process.env.NDAPI_API_KEY },
+});
+const { data } = await res.json();
+console.log(data.balance.available);
+```
+</CodeGroup>
+
+```json Response
+{
+  "success": true,
+  "data": {
+    "operator_name": "Your Business Name",
+    "currency": "<currency_code>",
+    "balance": {
+      "available": 485000,
+      "total_deposits": 500000,
+      "total_withdrawals": 15000
+    },
+    "stats": {
+      "total_deposits": 42,
+      "total_withdrawals": 3
+    },
+    "timestamp": "2026-09-13T10:00:00Z"
+  }
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `balance.available` | What you can transfer right now |
+| `balance.total_deposits` | Total net deposits credited |
+| `balance.total_withdrawals` | Total transfers debited |
+| `stats` | Count of deposits and withdrawals |
+
+Subscribe to `balance.low` to get alerted before your balance runs out.

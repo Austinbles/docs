@@ -1,0 +1,66 @@
+---
+title: "Error Handling and Idempotency"
+description: "Retry safely, handle duplicates and build a reliable integration."
+---
+
+## Idempotency
+
+The `reference` on a transfer (and `merchant_tx_ref` on a virtual account) is your idempotency key.
+
+- If a request times out or returns `5xx`, retry with the **same** reference.
+- If the original request was already processed, you get HTTP `409` with the original transaction. Nothing is processed twice.
+- If it wasn't processed, the retry is processed normally.
+
+<Tip>
+  A good reference pattern is `{your-app}-{user-id}-{timestamp}`. Save it before calling the API.
+</Tip>
+
+### 409 response
+
+```json
+{
+  "success": false,
+  "error": "Duplicate reference",
+  "code": "DUPLICATE_REFERENCE",
+  "original_transaction": {
+    "transaction_id": 12345,
+    "reference": "PAYOUT-2026-001",
+    "status": "completed",
+    "amount": 50000,
+    "net_amount": 50000,
+    "currency": "<currency_code>",
+    "created_at": "2026-09-22T14:00:00Z"
+  },
+  "hint": "Check original_transaction.status."
+}
+```
+
+A `409` means the new request was **rejected**; the original transaction stands. Only use a **new** reference if `original_transaction.status` is `failed` and you want to try again.
+
+## Retry strategy
+
+| Situation | Retry? |
+| --- | --- |
+| Timeout, `500` | Yes, with the same reference and exponential backoff |
+| `429` | Yes, after the `Retry-After` seconds |
+| `400`, `401`, `403`, `404` | No. Fix the request first |
+| `409` | No. Read the original transaction's status |
+
+## Best practices
+
+**Security**
+- Keep API keys and the webhook secret in environment variables, never in code or client apps.
+- Call NDAPI only from your backend, over HTTPS.
+- Always verify webhook signatures.
+
+**Reliability**
+- Verify account names before every transfer.
+- Use a unique reference for every transfer.
+- Make your webhook handler idempotent.
+- Subscribe to `balance.low` so you top up before transfers fail.
+
+**Testing**
+- Test every flow with your `NDAPI-TEST-` key before going live.
+- Test `transfer.failed`, `409` duplicates and webhook retries.
+
+See all status codes in [Errors](/api-reference/errors).

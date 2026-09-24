@@ -1,0 +1,46 @@
+---
+title: "Transactions and Amounts"
+description: "How the amount fields work on deposits and transfers."
+---
+
+Every deposit and every transfer is recorded as a transaction. All amount fields use the same meaning across API responses, transaction records and webhook payloads.
+
+## Amount fields
+
+| Field | Meaning |
+| --- | --- |
+| `amount` | The gross amount of the transaction. |
+| `fee` | The NDAPI fee, as agreed in your service agreement. |
+| `net_amount` | Deposits: `amount - fee`. Transfers: equal to `amount`. |
+| `provider_fee` | Transfers only: the bank transfer charge. |
+| `total_deducted` | Transfers only: `amount + fee + provider_fee`. |
+| `currency` | The currency code of the transaction. |
+
+## Deposits
+
+| Field | Meaning |
+| --- | --- |
+| `amount` | What the payer sent into the virtual account. |
+| `net_amount` | What is credited to your NDAPI balance. |
+
+<Tip>
+  Credit your customer with `net_amount`. Use `amount` for display.
+</Tip>
+
+## Transfers
+
+| Field | Meaning |
+| --- | --- |
+| `amount` | What the recipient receives, in full. |
+| `net_amount` | Same as `amount`. |
+| `total_deducted` | What leaves your balance: `amount + fee + provider_fee`. |
+
+<Note>
+  Your balance must cover `total_deducted`.
+</Note>
+
+## Fees
+
+Fee rates are agreed individually with each operator and are listed in your service agreement. Transfers between Nolubz accounts are free.
+
+See the [Transactions API](/api-reference/transactions).

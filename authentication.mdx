@@ -1,121 +1,58 @@
 ---
-title: "NDAPI Authentication: API Keys and Bearer Token Guide"
-sidebarTitle: "Authentication"
-description: "NDAPI uses Bearer token authentication. Learn how to create your API key, pass it correctly in request headers, and rotate keys safely."
+title: "Authentication"
+description: "Authenticate every request with your API key in the x-api-key header."
 ---
 
-Every request you make to the NDAPI REST API must be authenticated with an API key. NDAPI uses the industry-standard Bearer token scheme — you pass your key in the `Authorization` header of every HTTP request, and NDAPI validates it before processing anything. There are no sessions, cookies, or OAuth flows to manage. Your API key is the single credential that identifies your account and determines what your requests are permitted to do.
+Every request to NDAPI must include your API key in the `x-api-key` header.
 
-## Getting your API key
-
-API keys are created and managed from the NDAPI dashboard.
-
-1. Go to [https://dashboard.ndapi.io](https://dashboard.ndapi.io) and sign in to your account.
-2. Open **Settings** from the left-hand navigation menu.
-3. Click **API Keys** in the Settings sub-menu.
-4. Click **Create Key**, enter a descriptive label (for example, `production-server` or `staging-backend`), and confirm.
-5. Copy the key value from the confirmation dialog — **it is shown only once** and cannot be retrieved again. If you lose it, you must rotate it.
-
-You can create multiple keys for different environments or services, and revoke any key individually without affecting the others.
-
-## Passing your key in requests
-
-Include your API key as a Bearer token in the `Authorization` header of every request.
-
-```
-Authorization: Bearer <YOUR_API_KEY>
+```bash
+x-api-key: NDAPI-TEST-your_test_key
 ```
 
-The examples below show how to do this in cURL and in Node.js using the native `fetch` API.
+## Your credentials
 
-<CodeGroup>
+You receive these at onboarding:
 
-```bash cURL
-curl --request GET \
-  --url https://api.ndapi.io/v1/balance \
-  --header "Authorization: Bearer ndapi_live_YOUR_API_KEY" \
-  --header "Content-Type: application/json"
-```
+| Credential | Format | Used for |
+| --- | --- | --- |
+| Test API key | `NDAPI-TEST-...` | Development and testing |
+| Live API key | `NDAPI-LIVE-...` | Production (issued at go-live) |
+| Webhook secret | `NDAPI-WH-...` | Verifying webhook signatures |
 
-```javascript Node.js (fetch)
-const NDAPI_KEY = process.env.NDAPI_API_KEY;
+## Test and live mode
 
-const response = await fetch("https://api.ndapi.io/v1/balance", {
-  method: "GET",
-  headers: {
-    Authorization: `Bearer ${NDAPI_KEY}`,
-    "Content-Type": "application/json",
-  },
-});
+Test and live use the same base URL, `https://api.nolubz.com/v1`. The key prefix decides the mode.
 
-const data = await response.json();
-console.log(data);
-```
+| Key prefix | Mode | Behaviour |
+| --- | --- | --- |
+| `NDAPI-TEST-` | Test | No real money moves. Realistic mock responses. |
+| `NDAPI-LIVE-` | Live | Real payments and real bank transfers. |
 
-</CodeGroup>
+What works in test mode:
 
-## Environments {#environments}
+| Feature | Test mode |
+| --- | --- |
+| Create virtual account | Returns a mock account number |
+| Check balance | Returns your real test ledger balance |
+| Initiate transfer | Returns a mock success; no real transfer |
+| Verify account | Real account name lookup |
+| Webhooks | Fire them on demand with the [simulator](/api-reference/webhooks) |
+| Real deposits | Not supported |
 
-NDAPI provides two environments with separate API keys and separate base URLs. Use the sandbox environment freely during development — no real money moves and no live banking rails are involved.
+## IP whitelisting
 
-| Environment | Key prefix       | Base URL                          |
-|-------------|------------------|-----------------------------------|
-| Sandbox     | `ndapi_test_`    | `https://sandbox.ndapi.io/v1`     |
-| Live        | `ndapi_live_`    | `https://api.ndapi.io/v1`         |
-
-Keys from one environment do not work in the other. Sending a `ndapi_test_` key to the live base URL returns a `401 Unauthorized` error, and vice versa.
+API requests are accepted only from IP addresses registered for your account. Send your server's public IP addresses to [ndapi.admin@nolubz.com](mailto:ndapi.admin@nolubz.com) before you start testing. Requests from other addresses are rejected.
 
 <Warning>
-  Never expose your API key in client-side code, public repositories, or anywhere it can be read by unauthorized parties. A leaked live key gives anyone full access to initiate transfers and create virtual accounts on your account. If you suspect a key has been compromised, revoke it immediately from the dashboard and issue a new one.
+  Never put API keys in client-side code, mobile apps or public repositories. Call NDAPI only from your backend, and keep keys in environment variables.
 </Warning>
-
-<Tip>
-  Store your API key in an environment variable rather than hard-coding it in your source files. For example, export `NDAPI_API_KEY=ndapi_live_...` in your shell or add it to a `.env` file (and make sure `.env` is listed in `.gitignore`). Read it at runtime with `process.env.NDAPI_API_KEY` in Node.js or the equivalent in your language of choice.
-</Tip>
 
 ## Authentication errors
 
-When authentication fails, NDAPI returns a standard error response with an HTTP status code and a machine-readable `error` field in the response body.
-
-```json
-{
-  "status": "error",
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid or missing API key."
-  }
-}
-```
-
-The table below describes the two authentication-related HTTP status codes you may encounter.
-
-| HTTP Status | Error code      | Meaning                                                                                   |
-|-------------|-----------------|-------------------------------------------------------------------------------------------|
-| `401`       | `UNAUTHORIZED`  | No API key was provided, the key is malformed, or the key does not exist.                 |
-| `403`       | `FORBIDDEN`     | The key is valid but does not have permission to perform the requested action or access the resource. |
-
-If you receive a `403` check that the key belongs to the correct environment (live vs. sandbox) and that it has not been restricted to specific IP addresses or scopes in the dashboard.
-
-## Key rotation best practices
-
-Rotating your API keys regularly limits the window of exposure if a key is ever leaked. Follow these steps to rotate a key without causing downtime.
-
-<Steps>
-
-  ### Create a replacement key
-
-  In the dashboard, go to **Settings → API Keys** and click **Create Key**. Give the new key a clear label that indicates it is a replacement (for example, `production-server-v2`). Do not revoke the old key yet.
-
-  ### Deploy the new key to your infrastructure
-
-  Update the environment variable or secret store that your application reads at startup. Deploy or restart your service so it picks up the new key value. Verify that requests are succeeding with the new key by checking your application logs or calling `GET /balance`.
-
-  ### Revoke the old key
-
-  Once you have confirmed that all traffic is flowing through the new key, return to **Settings → API Keys** in the dashboard, find the old key, and click **Revoke**. The old key is immediately invalidated — any request still using it will receive a `401` error.
-
-  ### Update any secondary consumers
-
-  If multiple services, CI pipelines, or third-party integrations use the same key, update them all before revoking. Maintain a record of every place a key is used so you can rotate comprehensively each time.
-
-</Steps>
+| HTTP status | Error | Cause |
+| --- | --- | --- |
+| 401 | Missing API key | No key was sent in the `x-api-key` header. |
+| 401 | Invalid API key format | The key doesn't start with `NDAPI-TEST-` or `NDAPI-LIVE-`. |
+| 401 | Invalid API key | The key is not recognised. |
+| 401 | Operator account suspended | Your account is suspended. Contact ndapi.admin@nolubz.com. |
+| 403 | IP address not permitted | The request came from an IP address not registered for your account. |

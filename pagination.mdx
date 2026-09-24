@@ -1,0 +1,20 @@
+---
+title: "Pagination"
+description: "Page through transaction lists with page and limit."
+---
+
+`GET /transactions` returns results in pages.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `page` | `1` | Page number |
+| `limit` | `50` | Results per page, maximum `100` |
+
+```bash
+curl "https://api.nolubz.com/v1/transactions?period=month&page=2&limit=100" \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
+```
+
+Keep increasing `page` until a page returns fewer results than `limit`.
+
+To fetch one transaction, skip pagination and query by reference: `GET /transactions?reference=YOUR_REF`.

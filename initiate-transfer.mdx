@@ -1,0 +1,67 @@
+---
+title: "Send a Transfer"
+description: "Verify the recipient, send the payout and confirm it with webhooks."
+---
+
+## 0. Get the bank code
+
+Fetch supported banks and their codes with [`GET /banks`](/api-reference/transfers#bank-codes), and let your user pick their bank.
+
+## 1. Verify the recipient
+
+```bash
+curl -X POST https://api.nolubz.com/v1/virtual-accounts/verify \
+  -H "x-api-key: NDAPI-LIVE-your_live_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "account_number": "0123456789", "bank_code": "058" }'
+```
+
+Show the returned `data.account_name` to your user and get confirmation before sending.
+
+## 2. Send the transfer
+
+Generate a unique reference and save it **before** you call the API, so a retry reuses it.
+
+```javascript
+const reference = `payout-${userId}-${Date.now()}`;
+await saveReference(payoutId, reference);
+
+const res = await fetch("https://api.nolubz.com/v1/transfers", {
+  method: "POST",
+  headers: {
+    "x-api-key": process.env.NDAPI_API_KEY,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    amount: 50000,
+    bank_code: "058",
+    account_number: "0123456789",
+    account_name: "JANE SMITH",
+    reference,
+    narration: "Payout for order #1234",
+  }),
+});
+```
+
+## 3. Handle the result
+
+| Response | What to do |
+| --- | --- |
+| `status: completed` | Mark the payout done. |
+| `status: pending` | Wait for `transfer.success` or `transfer.failed`. |
+| `status: failed` | Your balance is restored. Tell your user. |
+| HTTP `409` | Already processed. Read `original_transaction.status`. |
+| Timeout or `5xx` | Retry with the **same** reference. |
+
+## 4. Confirm with webhooks
+
+```javascript
+switch (event) {
+  case "transfer.success":
+    await markPayoutDone(data.reference);
+    break;
+  case "transfer.failed":
+    await markPayoutFailed(data.reference, data.error);
+    break;
+}
+```

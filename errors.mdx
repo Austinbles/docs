@@ -1,0 +1,36 @@
+---
+title: "Errors"
+description: "HTTP status codes, error format and common error messages."
+---
+
+Errors return a JSON body with an `error` message:
+
+```json
+{ "success": false, "error": "Insufficient balance" }
+```
+
+## Status codes
+
+| Status | Meaning | Common causes |
+| --- | --- | --- |
+| 400 | Bad Request | Missing or invalid parameters, insufficient balance |
+| 401 | Unauthorized | Invalid API key, suspended account |
+| 403 | Forbidden | Request from an IP address not registered for your account |
+| 404 | Not Found | Wrong endpoint URL |
+| 409 | Conflict | Duplicate reference; the response includes the original transaction |
+| 429 | Too Many Requests | Rate limit exceeded; see `Retry-After` |
+| 500 | Server Error | Temporary problem; retry after a few seconds |
+
+## Common messages
+
+| Message | What to do |
+| --- | --- |
+| Invalid API key | Check the key and that it starts with `NDAPI-TEST-` or `NDAPI-LIVE-` |
+| Insufficient balance | Top up your balance before sending the transfer |
+| Duplicate reference | Already processed; read `original_transaction.status` |
+| amount, account_number, bank_code, reference required | Include all required transfer fields |
+| Operator account suspended | Contact ndapi.admin@nolubz.com |
+| IP address not permitted | Call from a registered IP, or send us your new server IP |
+| Simulator only available in test mode | Use your `NDAPI-TEST-` key with `/simulate` |
+
+See [Error handling and idempotency](/guides/error-handling) for retry rules.

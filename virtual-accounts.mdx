@@ -1,0 +1,29 @@
+---
+title: "Virtual Accounts"
+description: "Give each customer or transaction its own account number for collecting payments."
+---
+
+A virtual account is a real bank account number that routes payments into your NDAPI balance. When a customer pays into it, NDAPI credits your balance and sends a `payment.received` webhook carrying your reference.
+
+## Permanent and dynamic accounts
+
+| Type | Expiry | Best for |
+| --- | --- | --- |
+| Permanent | Never expires | Wallet funding, recurring payments, one account per customer |
+| Dynamic | Expires at `expires_at` | One-time payments, checkout, P2P trades |
+
+Leave `expires_at` empty for a permanent account.
+
+## Account name
+
+The account name includes your business name: `{your business name}/{account_name}`, for example `YourBusiness/John Doe`. Customers see it in their banking app before paying.
+
+## Matching payments
+
+Set `merchant_tx_ref` to your own order or customer ID. NDAPI returns it as `reference` in every webhook and transaction record, so you always know where a payment belongs.
+
+## Expected amount
+
+`expected_amount` is optional and informational. If the customer sends a different amount, the payment is still accepted and your balance is credited with the amount actually received. Always credit your customer from the webhook's `net_amount`, never from the amount you expected.
+
+See the [Virtual Accounts API](/api-reference/virtual-accounts).

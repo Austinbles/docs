@@ -1,0 +1,61 @@
+---
+title: "API Overview"
+description: "Base URL, request format, responses and rate limits."
+---
+
+## Base URL
+
+```
+https://api.nolubz.com/v1
+```
+
+Test and live requests use the same base URL. Your API key prefix (`NDAPI-TEST-` or `NDAPI-LIVE-`) selects the mode. See [Authentication](/api-reference/authentication).
+
+## Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | [`/virtual-accounts`](/api-reference/virtual-accounts) | Create a virtual account |
+| `POST` | [`/virtual-accounts/verify`](/api-reference/virtual-accounts#verify-a-bank-account) | Verify a bank account name |
+| `POST` | [`/transfers`](/api-reference/transfers) | Send a bank transfer |
+| `GET` | [`/banks`](/api-reference/transfers#bank-codes) | List supported banks and their codes |
+| `GET` | [`/transactions`](/api-reference/transactions) | List or look up transactions |
+| `GET` | [`/balance`](/api-reference/balance) | Get your balance |
+| `POST` | [`/simulate`](/api-reference/webhooks) | Fire a test webhook (test mode only) |
+
+## Requests
+
+Send JSON bodies with `Content-Type: application/json`. Amounts are numbers in the major currency unit. Timestamps are ISO 8601 in UTC.
+
+## Responses
+
+Successful responses look like this:
+
+```json
+{
+  "success": true,
+  "data": { }
+}
+```
+
+Errors return an `error` message and a matching HTTP status. See [Errors](/api-reference/errors).
+
+## Rate limits
+
+Limits apply per API key.
+
+| Endpoint | Limit per minute |
+| --- | --- |
+| `POST /virtual-accounts` | 300 |
+| `POST /transfers` | 60 |
+| `GET /balance` | 120 |
+| `GET /transactions` | 120 |
+| `POST /simulate` | 30 (test only) |
+
+Over the limit, you get HTTP `429` with a `Retry-After` header in seconds:
+
+```json
+{ "error": "Rate limit exceeded", "retry_after": 60, "limit": "60 requests per minute" }
+```
+
+Contact us if you need higher limits.

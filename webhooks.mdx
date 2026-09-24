@@ -1,0 +1,156 @@
+---
+title: "Webhook Events"
+description: "Every event NDAPI sends, when it fires, and what the payload contains."
+---
+
+NDAPI sends a signed `POST` request to your webhook URL whenever something happens on your account. Every webhook has the same envelope:
+
+```json
+{
+  "event": "payment.received",
+  "data": { }
+}
+```
+
+## Events
+
+**Mandatory** events are always delivered. **Optional** events are delivered if you subscribe to them.
+
+| Event | Trigger | Type |
+| --- | --- | --- |
+| `payment.received` | A deposit was credited to your balance | Mandatory |
+| `payment.failed` | A deposit attempt failed or expired | Optional |
+| `transfer.success` | A transfer completed | Optional |
+| `transfer.pending` | A transfer was accepted and is processing | Optional |
+| `transfer.failed` | A transfer failed; balance restored | Mandatory |
+| `balance.low` | Balance dropped below your threshold | Optional |
+| `balance.zero` | Balance reached zero | Optional |
+| `weekly.summary` | Weekly transaction and fee summary | Optional |
+| `monthly.statement` | End-of-month summary | Optional |
+| `account.suspended` | Your operator account was suspended | Mandatory |
+| `account.activated` | Your operator account was reactivated | Optional |
+
+## Two webhook URLs
+
+You can use one URL for everything, or separate collections from payouts:
+
+| Events | Delivered to |
+| --- | --- |
+| `payment.*` | `webhook_url` |
+| `transfer.*` | `webhook_url_transfer` if set, otherwise `webhook_url` |
+| `balance.*`, `account.*`, reports | `webhook_url` |
+
+Both URLs use the same webhook secret, and retries run independently per URL. Contact us to set `webhook_url_transfer`.
+
+## Payloads
+
+### payment.received
+
+```json
+{
+  "event": "payment.received",
+  "data": {
+    "reference": "ORDER-2026-001",
+    "amount": 50000,
+    "fee": "<as per your agreement>",
+    "net_amount": "<amount minus fee>",
+    "currency": "<currency_code>",
+    "account_number": "9646780657",
+    "transaction_id": 42,
+    "provider_ref": "VACT-TRA-...",
+    "timestamp": "2026-09-13T10:00:00Z"
+  }
+}
+```
+
+### payment.failed
+
+```json
+{
+  "event": "payment.failed",
+  "data": {
+    "reference": "ORDER-2026-001",
+    "account_number": "9646780657",
+    "reason": "Payment expired",
+    "timestamp": "2026-09-22T14:00:00Z"
+  }
+}
+```
+
+### transfer.success
+
+```json
+{
+  "event": "transfer.success",
+  "data": {
+    "reference": "PAYOUT-2026-001",
+    "amount": 50000,
+    "fee": "<as per your agreement>",
+    "provider_fee": "<bank transfer charge>",
+    "net_amount": 50000,
+    "total_deducted": "<amount + fee + provider_fee>",
+    "currency": "<currency_code>",
+    "account_number": "0123456789",
+    "account_name": "JANE SMITH",
+    "bank_name": "Access Bank",
+    "transaction_id": 12345,
+    "provider_ref": "TRF-...",
+    "status": "completed",
+    "timestamp": "2026-09-22T14:00:00Z"
+  }
+}
+```
+
+`transfer.pending` has the same shape with `"status": "pending"`.
+
+### transfer.failed
+
+```json
+{
+  "event": "transfer.failed",
+  "data": {
+    "reference": "PAYOUT-2026-001",
+    "amount": 50000,
+    "currency": "<currency_code>",
+    "account_number": "0123456789",
+    "account_name": "JANE SMITH",
+    "error": "Invalid account number",
+    "transaction_id": 43,
+    "timestamp": "2026-09-13T10:05:00Z"
+  }
+}
+```
+
+### balance.low
+
+```json
+{
+  "event": "balance.low",
+  "data": {
+    "balance": 45000,
+    "threshold": 50000,
+    "currency": "<currency_code>",
+    "timestamp": "2026-09-13T10:10:00Z"
+  }
+}
+```
+
+### account.suspended
+
+```json
+{
+  "event": "account.suspended",
+  "data": {
+    "operator_name": "Your Business Name",
+    "reason": "Contact ndapi.admin@nolubz.com for details.",
+    "timestamp": "2026-09-13T10:15:00Z"
+  }
+}
+```
+
+## Delivery guarantees
+
+- A completed transaction is never pushed again after you acknowledge it.
+- If delivery fails, NDAPI retries. Your handler may still see an event more than once, so deduplicate on `transaction_id` or `reference`.
+
+See [Handle webhooks](/guides/handle-webhooks) for signature verification and retries.

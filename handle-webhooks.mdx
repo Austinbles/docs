@@ -1,0 +1,101 @@
+---
+title: "Handle Webhooks"
+description: "Set up your endpoint, verify signatures, and process events safely."
+---
+
+## Set up your endpoint
+
+Your endpoint must be public, use HTTPS, and return HTTP `200` within 10 seconds. Send your webhook URL to [ndapi.admin@nolubz.com](mailto:ndapi.admin@nolubz.com), or set it in your Operator Dashboard.
+
+Webhooks don't come from fixed IP addresses. Don't filter them by IP; verify the signature instead.
+
+## Verify the signature
+
+Every webhook carries two headers:
+
+| Header | Content |
+| --- | --- |
+| `x-ndapi-signature` | `Base64(HMAC-SHA256(webhook_secret, raw_request_body))` |
+| `x-ndapi-timestamp` | ISO 8601 time the webhook was sent |
+
+<Warning>
+  Compute the signature over the **raw request body bytes exactly as received**. Do not parse the JSON and serialize it again first; that changes the bytes and the signature will not match.
+</Warning>
+
+<CodeGroup>
+```javascript Node.js (Express)
+const crypto = require("crypto");
+
+app.post("/ndapi/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const expected = crypto
+    .createHmac("sha256", process.env.NDAPI_WEBHOOK_SECRET)
+    .update(req.body)            // Buffer of the raw body
+    .digest("base64");
+
+  const received = req.headers["x-ndapi-signature"] || "";
+  const valid = expected.length === received.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  if (!valid) return res.status(401).json({ error: "Invalid signature" });
+
+  const { event, data } = JSON.parse(req.body.toString("utf8"));
+  // handle the event...
+  res.json({ received: true });
+});
+```
+
+```python Python (Flask)
+import base64, hashlib, hmac, json, os
+from flask import request, jsonify
+
+@app.post("/ndapi/webhook")
+def ndapi_webhook():
+    raw = request.get_data()  # raw bytes, exactly as received
+    expected = base64.b64encode(
+        hmac.new(os.environ["NDAPI_WEBHOOK_SECRET"].encode(), raw, hashlib.sha256).digest()
+    ).decode()
+    received = request.headers.get("x-ndapi-signature", "")
+    if not hmac.compare_digest(expected, received):
+        return jsonify(error="Invalid signature"), 401
+
+    body = json.loads(raw)
+    # handle body["event"], body["data"]...
+    return jsonify(received=True)
+```
+
+```php PHP
+<?php
+$raw = file_get_contents('php://input');
+$expected = base64_encode(hash_hmac('sha256', $raw, getenv('NDAPI_WEBHOOK_SECRET'), true));
+$received = $_SERVER['HTTP_X_NDAPI_SIGNATURE'] ?? '';
+
+if (!hash_equals($expected, $received)) {
+    http_response_code(401);
+    exit(json_encode(['error' => 'Invalid signature']));
+}
+
+$body = json_decode($raw, true);
+// handle $body['event'], $body['data']...
+echo json_encode(['received' => true]);
+```
+</CodeGroup>
+
+## Retries
+
+A delivery fails if your endpoint returns a non-2xx status or doesn't respond within 10 seconds. NDAPI then retries:
+
+| Attempt | When |
+| --- | --- |
+| 1st | Immediately |
+| 2nd | 5 minutes later |
+| 3rd | 30 minutes later |
+| 4th | 2 hours later |
+| 5th | 24 hours later |
+
+## Best practices
+
+- Respond with `200` quickly and do heavy work in the background.
+- Deduplicate on `transaction_id` or `reference`; the same event can arrive twice.
+- Handle `transfer.failed` so your records match your restored balance.
+- Test every event with the [simulator](/api-reference/webhooks) before going live.
+
+See all events and payloads in [Webhook Events](/concepts/webhooks).
