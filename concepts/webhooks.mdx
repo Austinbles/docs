@@ -1,190 +1,156 @@
 ---
-title: "Webhooks: Real-Time Event Notifications from NDAPI"
-sidebarTitle: "Webhooks"
-description: "NDAPI pushes signed webhook events to your server for key actions. Learn about all event types, payload shapes, signature verification, and retry policy."
+title: "Webhook Events"
+description: "Every event NDAPI sends, when it fires, and what the payload contains."
 ---
 
-Webhooks are the mechanism NDAPI uses to push real-time notifications to your server the moment something meaningful happens — a virtual account receives a payment, a transfer settles, or a transfer fails. Instead of repeatedly polling the API to check whether a state has changed, you register an HTTPS endpoint on your server, and NDAPI delivers a signed HTTP POST request to that URL whenever a relevant event occurs. Building your integration around webhooks results in faster payment confirmations, lower API call volume, and a more responsive experience for your customers.
-
-## Event Types
-
-NDAPI emits the following event types. You can subscribe to all events or configure per-event filtering in the [NDAPI Dashboard](https://dashboard.ndapi.io/webhooks).
-
-| Event | Description |
-|---|---|
-| `virtual_account.created` | A new virtual account has been successfully provisioned and is ready to receive payments. |
-| `virtual_account.credited` | An inbound payment has been received into a virtual account and the balance has been updated. |
-| `transfer.processing` | A transfer has been submitted to the destination bank and is awaiting final settlement confirmation. |
-| `transfer.success` | A transfer has been fully settled and the funds are available in the destination account. |
-| `transfer.failed` | A transfer could not be completed. The `failure_reason` field in the payload will explain why. |
-
-## Webhook Payload Structure
-
-Every webhook NDAPI sends follows the same envelope structure. The top-level `id` is a unique identifier for the delivery (useful for deduplication), `event` tells you what happened, `timestamp` records when it happened (in UTC), and `data` contains the full relevant resource object for that event.
+NDAPI sends a signed `POST` request to your webhook URL whenever something happens on your account. Every webhook has the same envelope:
 
 ```json
 {
-  "id": "evt_01HPQR789STU",
-  "event": "virtual_account.credited",
-  "timestamp": "2024-01-15T10:30:00Z",
+  "event": "payment.received",
+  "data": { }
+}
+```
+
+## Events
+
+**Mandatory** events are always delivered. **Optional** events are delivered if you subscribe to them.
+
+| Event | Trigger | Type |
+| --- | --- | --- |
+| `payment.received` | A deposit was credited to your balance | Mandatory |
+| `payment.failed` | A deposit attempt failed or expired | Optional |
+| `transfer.success` | A transfer completed | Optional |
+| `transfer.pending` | A transfer was accepted and is processing | Optional |
+| `transfer.failed` | A transfer failed; balance restored | Mandatory |
+| `balance.low` | Balance dropped below your threshold | Optional |
+| `balance.zero` | Balance reached zero | Optional |
+| `weekly.summary` | Weekly transaction and fee summary | Optional |
+| `monthly.statement` | End-of-month summary | Optional |
+| `account.suspended` | Your operator account was suspended | Mandatory |
+| `account.activated` | Your operator account was reactivated | Optional |
+
+## Two webhook URLs
+
+You can use one URL for everything, or separate collections from payouts:
+
+| Events | Delivered to |
+| --- | --- |
+| `payment.*` | `webhook_url` |
+| `transfer.*` | `webhook_url_transfer` if set, otherwise `webhook_url` |
+| `balance.*`, `account.*`, reports | `webhook_url` |
+
+Both URLs use the same webhook secret, and retries run independently per URL. Contact us to set `webhook_url_transfer`.
+
+## Payloads
+
+### payment.received
+
+```json
+{
+  "event": "payment.received",
   "data": {
-    "id": "txn_01HPQR567LMN",
+    "reference": "ORDER-2026-001",
     "amount": 50000,
-    "currency": "NGN",
-    "virtual_account_id": "va_01HXYZ123",
-    "reference": "TXN-20240115-001",
-    "description": "Payment from Emeka Eze via First Bank",
-    "balance_before": 4200000,
-    "balance_after": 4250000,
-    "created_at": "2024-01-15T10:30:00Z"
+    "fee": "<as per your agreement>",
+    "net_amount": "<amount minus fee>",
+    "currency": "<currency_code>",
+    "account_number": "9646780657",
+    "transaction_id": 42,
+    "provider_ref": "VACT-TRA-...",
+    "timestamp": "2026-09-13T10:00:00Z"
   }
 }
 ```
 
-The shape of the `data` object varies by event type:
+### payment.failed
 
-<Accordion title="virtual_account.created payload">
-  The `data` object contains the full virtual account object as described in [Virtual Accounts](/concepts/virtual-accounts), including `id`, `account_number`, `account_name`, `bank_name`, `bank_code`, `currency`, `status`, `customer_name`, `customer_email`, `reference`, and `created_at`.
-</Accordion>
+```json
+{
+  "event": "payment.failed",
+  "data": {
+    "reference": "ORDER-2026-001",
+    "account_number": "9646780657",
+    "reason": "Payment expired",
+    "timestamp": "2026-09-22T14:00:00Z"
+  }
+}
+```
 
-<Accordion title="virtual_account.credited payload">
-  The `data` object contains the transaction record for the inbound credit, including `id`, `amount`, `currency`, `virtual_account_id`, `reference`, `description`, `balance_before`, `balance_after`, and `created_at`.
-</Accordion>
+### transfer.success
 
-<Accordion title="transfer.processing / transfer.success / transfer.failed payload">
-  The `data` object contains the full transfer object as described in [Transfers](/concepts/transfers), including `id`, `amount`, `currency`, `status`, `narration`, `reference`, `destination`, `created_at`, `completed_at`, and `failure_reason`.
-</Accordion>
+```json
+{
+  "event": "transfer.success",
+  "data": {
+    "reference": "PAYOUT-2026-001",
+    "amount": 50000,
+    "fee": "<as per your agreement>",
+    "provider_fee": "<bank transfer charge>",
+    "net_amount": 50000,
+    "total_deducted": "<amount + fee + provider_fee>",
+    "currency": "<currency_code>",
+    "account_number": "0123456789",
+    "account_name": "JANE SMITH",
+    "bank_name": "Access Bank",
+    "transaction_id": 12345,
+    "provider_ref": "TRF-...",
+    "status": "completed",
+    "timestamp": "2026-09-22T14:00:00Z"
+  }
+}
+```
 
-## Verifying Webhook Signatures
+`transfer.pending` has the same shape with `"status": "pending"`.
 
-Every webhook request from NDAPI includes an `X-NDAPI-Signature` header. This header contains an HMAC-SHA256 signature computed from the raw request body using your webhook secret as the key. You must verify this signature before processing any webhook payload to ensure the request genuinely came from NDAPI and has not been tampered with.
+### transfer.failed
 
-Your webhook secret is available in the [NDAPI Dashboard](https://dashboard.ndapi.io/webhooks). Treat it like a password — do not commit it to source control or expose it in client-side code.
+```json
+{
+  "event": "transfer.failed",
+  "data": {
+    "reference": "PAYOUT-2026-001",
+    "amount": 50000,
+    "currency": "<currency_code>",
+    "account_number": "0123456789",
+    "account_name": "JANE SMITH",
+    "error": "Invalid account number",
+    "transaction_id": 43,
+    "timestamp": "2026-09-13T10:05:00Z"
+  }
+}
+```
 
-<Tabs>
-  <Tab title="Node.js">
-    ```javascript
-    const crypto = require("crypto");
+### balance.low
 
-    function verifyWebhookSignature(rawBody, signatureHeader, secret) {
-      const expectedSignature = crypto
-        .createHmac("sha256", secret)
-        .update(rawBody) // rawBody must be the raw Buffer, not a parsed object
-        .digest("hex");
+```json
+{
+  "event": "balance.low",
+  "data": {
+    "balance": 45000,
+    "threshold": 50000,
+    "currency": "<currency_code>",
+    "timestamp": "2026-09-13T10:10:00Z"
+  }
+}
+```
 
-      const trusted = Buffer.from(expectedSignature, "utf8");
-      const received = Buffer.from(signatureHeader, "utf8");
+### account.suspended
 
-      // Use timingSafeEqual to prevent timing attacks
-      if (trusted.length !== received.length) {
-        return false;
-      }
+```json
+{
+  "event": "account.suspended",
+  "data": {
+    "operator_name": "Your Business Name",
+    "reason": "Contact ndapi.admin@nolubz.com for details.",
+    "timestamp": "2026-09-13T10:15:00Z"
+  }
+}
+```
 
-      return crypto.timingSafeEqual(trusted, received);
-    }
+## Delivery guarantees
 
-    // Express example
-    app.post(
-      "/webhooks/ndapi",
-      express.raw({ type: "application/json" }), // important: use raw body
-      (req, res) => {
-        const signature = req.headers["x-ndapi-signature"];
-        const isValid = verifyWebhookSignature(
-          req.body,
-          signature,
-          process.env.NDAPI_WEBHOOK_SECRET
-        );
+- A completed transaction is never pushed again after you acknowledge it.
+- If delivery fails, NDAPI retries. Your handler may still see an event more than once, so deduplicate on `transaction_id` or `reference`.
 
-        if (!isValid) {
-          return res.status(401).send("Invalid signature");
-        }
-
-        // Acknowledge receipt immediately
-        res.status(200).send("OK");
-
-        // Process the event asynchronously
-        const event = JSON.parse(req.body);
-        handleWebhookEvent(event);
-      }
-    );
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    import hashlib
-    import hmac
-    import os
-    from flask import Flask, request, abort
-
-    app = Flask(__name__)
-
-    def verify_webhook_signature(raw_body: bytes, signature_header: str, secret: str) -> bool:
-        expected_signature = hmac.new(
-            secret.encode("utf-8"),
-            raw_body,
-            hashlib.sha256
-        ).hexdigest()
-
-        # Use compare_digest to prevent timing attacks
-        return hmac.compare_digest(expected_signature, signature_header)
-
-
-    @app.route("/webhooks/ndapi", methods=["POST"])
-    def handle_webhook():
-        raw_body = request.get_data()  # important: use raw bytes, not request.json
-        signature = request.headers.get("X-NDAPI-Signature", "")
-        secret = os.environ["NDAPI_WEBHOOK_SECRET"]
-
-        if not verify_webhook_signature(raw_body, signature, secret):
-            abort(401)
-
-        # Acknowledge receipt immediately
-        response = {"status": "ok"}
-
-        # Parse and process the event
-        event = request.get_json()
-        process_event_async(event)  # hand off to a queue or background worker
-
-        return response, 200
-    ```
-  </Tab>
-</Tabs>
-
-<Warning>
-  Always validate the signature using the **raw, unparsed request body bytes**. If you parse the JSON first and then re-serialize it to verify the signature, the string may differ from what NDAPI signed (due to key ordering, whitespace, or encoding differences), causing all verifications to fail.
-</Warning>
-
-## Retry Policy
-
-If your endpoint does not respond with an HTTP `2xx` status code within 30 seconds, NDAPI treats the delivery as failed and will retry it automatically. Retries follow an exponential backoff schedule:
-
-| Attempt | Delay After Previous Failure |
-|---|---|
-| 1st retry | 1 minute |
-| 2nd retry | 5 minutes |
-| 3rd retry | 30 minutes |
-| 4th retry | 2 hours |
-| 5th retry | 8 hours |
-
-After five failed retry attempts, NDAPI will stop trying to deliver the event. You can view failed webhook deliveries and manually trigger a re-delivery for any event from the [NDAPI Dashboard](https://dashboard.ndapi.io/webhooks/deliveries).
-
-<Warning>
-  Respond with HTTP `200` as quickly as possible — ideally before you begin any processing logic. If your handler performs database writes, sends emails, or calls external services synchronously, it risks timing out and causing NDAPI to retry an event that was actually delivered successfully. The recommended pattern is to enqueue the raw payload to an internal queue or worker system immediately upon receipt, acknowledge with `200`, and process asynchronously.
-</Warning>
-
-## Handling Duplicate Deliveries
-
-<Tip>
-  Your webhook handler should be **idempotent** — processing the same event more than once should produce the same result as processing it once. NDAPI's retry mechanism means it is possible, under certain network conditions, for your server to receive the same event delivery more than once even after responding with `200`. Guard against this by storing the event `id` or payload `reference` in your database and skipping processing if you have already handled that event.
-</Tip>
-
-## What's Next
-
-<CardGroup cols={2}>
-  <Card title="Handle Webhooks Guide" icon="bolt" href="/guides/handle-webhooks">
-    End-to-end walkthrough for registering an endpoint, verifying signatures, and handling each event type in production.
-  </Card>
-  <Card title="Virtual Accounts" icon="building-columns" href="/concepts/virtual-accounts">
-    Learn about the virtual account model that generates `virtual_account.credited` events.
-  </Card>
-</CardGroup>
+See [Handle webhooks](/guides/handle-webhooks) for signature verification and retries.

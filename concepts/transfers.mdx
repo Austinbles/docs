@@ -1,115 +1,31 @@
 ---
-title: "Transfers: Initiating Outgoing Payments With NDAPI"
-sidebarTitle: "Transfers"
-description: "Outgoing transfers in NDAPI move funds from your wallet to external bank accounts. Learn about states, idempotency, and supported markets."
+title: "Transfers"
+description: "Send payouts from your NDAPI balance to bank accounts."
 ---
 
-A transfer in NDAPI represents an outgoing payment instruction — a request to send a specific amount of money from your NDAPI wallet to an external bank account. Transfers are the primary mechanism for disbursements, vendor payouts, customer refunds, and any other scenario where you need to move funds out of your NDAPI balance to a destination account in a supported market. Every transfer you initiate is tracked through a defined lifecycle and produces a corresponding transaction record in your ledger.
+A transfer sends money from your NDAPI balance to a bank account. The recipient always receives the full `amount`. NDAPI charges are taken from your balance on top, so you stay in control of how you bill your own users:
 
-## Transfer States
-
-Each transfer moves through a sequence of states from the moment you submit it to the moment it is settled or fails. Understanding these states is essential for building robust disbursement workflows.
-
-<Steps>
-  <Step title="pending">
-    The transfer has been accepted by NDAPI and is queued for processing. Your request has been validated and the funds have been reserved from your balance, but the payment instruction has not yet been submitted to the banking network.
-  </Step>
-  <Step title="processing">
-    The payment instruction has been submitted to the destination bank or payment rail. NDAPI is awaiting a final confirmation of settlement. This state can last from a few seconds to several minutes depending on the destination network.
-  </Step>
-  <Step title="success or failed">
-    **`success`** — The transfer has been settled and the funds are available in the destination account. The `completed_at` timestamp is set at this point.
-
-    **`failed`** — The transfer could not be completed. The `failure_reason` field will contain a human-readable description of why the transfer failed (for example, invalid account number or insufficient balance). Reserved funds are returned to your NDAPI balance.
-  </Step>
-</Steps>
-
-<Tip>
-  The most reliable way to track transfer state changes in real time is to listen for webhook events. NDAPI emits `transfer.processing`, `transfer.success`, and `transfer.failed` events as a transfer moves through its lifecycle, so you don't need to poll the API. See [Webhooks](/concepts/webhooks) to get started.
-</Tip>
-
-## Transfer Object
-
-The following fields make up a transfer object returned by the NDAPI API.
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Unique identifier for the transfer, prefixed with `tr_`. |
-| `amount` | number | The transfer amount in the smallest currency unit (e.g. kobo for NGN, pesewas for GHS). |
-| `currency` | string | ISO 4217 currency code for the transfer (e.g. `NGN`, `ZAR`). |
-| `status` | string | Current state: `pending`, `processing`, `success`, or `failed`. |
-| `narration` | string | Description or memo attached to the transfer, visible to the recipient's bank. |
-| `reference` | string | Your unique idempotency key for this transfer. See [Idempotency](#idempotency) below. |
-| `destination` | object | The receiving bank account details. See sub-fields below. |
-| `destination.account_number` | string | The destination bank account number. |
-| `destination.bank_code` | string | The bank code of the destination bank. |
-| `destination.account_name` | string | The registered name on the destination account. |
-| `created_at` | string | ISO 8601 timestamp of when the transfer was created. |
-| `completed_at` | string \| null | ISO 8601 timestamp of when the transfer reached a terminal state (`success` or `failed`). Null while in progress. |
-| `failure_reason` | string \| null | Human-readable explanation of why the transfer failed. Null for non-failed transfers. |
-
-A complete transfer object looks like this:
-
-```json
-{
-  "id": "tr_01HABC789XYZ",
-  "amount": 2500000,
-  "currency": "NGN",
-  "status": "success",
-  "narration": "Vendor payout - Invoice #INV-2024-088",
-  "reference": "PAYOUT-INV-2024-088",
-  "destination": {
-    "account_number": "0987654321",
-    "bank_code": "058",
-    "account_name": "Chukwuemeka Obi"
-  },
-  "created_at": "2024-01-15T11:00:00Z",
-  "completed_at": "2024-01-15T11:00:42Z",
-  "failure_reason": null
-}
+```
+net_amount     = amount                        (what the recipient receives)
+total_deducted = amount + fee + provider_fee   (what leaves your balance)
 ```
 
-## Idempotency
+Your balance must cover `total_deducted`.
 
-The `reference` field on every transfer acts as an idempotency key. If you submit a transfer request with a `reference` value that already exists in your NDAPI account, the API will not create a new transfer — it will return the original transfer object associated with that reference, along with an HTTP `200` status.
+## Transfer status
 
-This protects you against accidental duplicate payouts caused by network errors, retries, or race conditions in your application. A few things to keep in mind:
+| Status | Meaning |
+| --- | --- |
+| `completed` | Funds delivered to the recipient. |
+| `pending` | Accepted and awaiting processing. Watch for `transfer.success` or `transfer.failed`. |
+| `failed` | The transfer failed and your balance was restored automatically. |
 
-<CardGroup cols={2}>
-  <Card title="Make references unique" icon="fingerprint">
-    Use a combination of your internal record ID and a timestamp or UUID to guarantee uniqueness across all transfers (e.g. `PAYOUT-INV-2024-088-1705312800`).
-  </Card>
-  <Card title="References are permanent" icon="lock">
-    Once a reference has been used, it is permanently associated with that transfer. You cannot reuse a reference to initiate a new transfer, even if the original transfer failed.
-  </Card>
-</CardGroup>
+## Before you send
 
-## Before You Send: Verify Destination Details
+Always verify the account name first with [Verify Account](/api-reference/virtual-accounts#verify-a-bank-account), and confirm it with your user.
 
-<Warning>
-  Always verify destination account details before initiating a transfer. NDAPI provides a bank account verification endpoint at `GET /v1/banks/verify` that resolves an account number and bank code to the registered account name. You should display this resolved name to your operator or end user for confirmation before submitting the transfer. Funds sent to an incorrect account number cannot be automatically recalled, and recovery may require manual intervention through the destination bank.
-</Warning>
+## Safe retries
 
-## Supported Currencies and Destinations
+Every transfer needs a unique `reference`. If a request times out, retry with the **same** reference. A transfer is never processed twice. See [Error handling](/guides/error-handling#idempotency).
 
-Transfers can be sent in the following currencies to bank accounts in the corresponding markets:
-
-| Currency | Market | Supported Rails |
-|---|---|---|
-| `NGN` | Nigeria | NIBSS Instant Payment (NIP), NIP-based interbank transfers |
-| `GHS` | Ghana | GIP interbank transfers, local bank-to-bank |
-| `KES` | Kenya | Pesalink, local interbank transfers |
-| `ZAR` | South Africa | EFT (Electronic Funds Transfer), RTC (Real-Time Clearing) |
-
-Each market has its own bank code format and settlement timelines. Refer to the [Bank Codes Reference](https://dashboard.ndapi.io/docs/bank-codes) in the NDAPI Dashboard for a full list of supported banks per market.
-
-## What's Next
-
-<CardGroup cols={2}>
-  <Card title="Initiate a Transfer" icon="paper-plane" href="/guides/initiate-transfer">
-    Follow the step-by-step guide to sending your first transfer via the NDAPI API.
-  </Card>
-  <Card title="Webhooks" icon="bolt" href="/concepts/webhooks">
-    Set up real-time notifications to track the outcome of every transfer automatically.
-  </Card>
-</CardGroup>
+See the [Transfers API](/api-reference/transfers).

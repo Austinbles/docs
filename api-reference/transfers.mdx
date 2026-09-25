@@ -1,367 +1,116 @@
 ---
-title: "Transfers API Reference — NDAPI Payment Documentation"
-sidebarTitle: "Transfers"
-description: "Initiate and track NDAPI money transfers. Covers POST, GET by ID, and list endpoints with request params, status codes, and example payloads."
+title: "Transfers"
+description: "Send bank transfers from your NDAPI balance."
 ---
 
-Transfers allow you to push funds from your NDAPI balance to any bank account in a supported market. Every transfer is uniquely identified by a `reference` you supply, which doubles as an idempotency key so you can safely retry failed requests without risking double-sends. The endpoints below let you initiate a transfer, check its status, and page through historical transfer records.
+## Send a transfer
 
----
+`POST /transfers`
 
-## POST /transfers
+<Warning>
+  The recipient receives the full `amount`. Your balance is debited `total_deducted` (`amount + fee + provider_fee`) as soon as the transfer is accepted. Always [verify the account name](/api-reference/virtual-accounts#verify-a-bank-account) first.
+</Warning>
 
-Initiate an outgoing transfer to a destination bank account. Funds are debited from your NDAPI balance immediately. The transfer will move through `pending` → `processing` → `success` (or `failed`) states asynchronously; subscribe to the `transfer.success` and `transfer.failed` [webhook events](/api-reference/webhooks) to receive real-time status updates.
-
-### Request Body
-
-<ParamField body="amount" type="number" required>
-  The amount to transfer in the major currency unit — for example, `5000` represents ₦5,000 or GH₵5,000. Do not pass subunits (kobo, pesewas, etc.).
-</ParamField>
-
-<ParamField body="currency" type="string" required>
-  ISO 4217 currency code. Supported values: `NGN`, `GHS`, `KES`, `ZAR`.
-</ParamField>
-
-<ParamField body="destination" type="object" required>
-  Bank account that will receive the funds.
-
-  <Expandable title="destination fields">
-    <ParamField body="account_number" type="string" required>
-      The recipient's bank account number.
-    </ParamField>
-
-    <ParamField body="bank_code" type="string" required>
-      The clearing code of the recipient's bank (e.g. `044` for Access Bank Nigeria).
-    </ParamField>
-
-    <ParamField body="account_name" type="string" required>
-      The registered name on the recipient account. NDAPI uses this for beneficiary name validation before the transfer is processed.
-    </ParamField>
-  </Expandable>
-</ParamField>
-
-<ParamField body="narration" type="string" required>
-  A short description that appears on the recipient's bank statement. Maximum 100 characters.
-</ParamField>
-
-<ParamField body="reference" type="string" required>
-  A unique string you generate to identify this transfer request. Submitting the same `reference` more than once returns the original transfer record without initiating a second debit.
-</ParamField>
-
-<ParamField body="metadata" type="object">
-  Arbitrary key-value pairs to attach to the transfer. All values must be strings. Returned as-is in subsequent reads and webhook payloads.
-</ParamField>
-
-### Response Fields
-
-<ResponseField name="id" type="string">
-  NDAPI-assigned unique identifier for the transfer (e.g. `txf_01HY…`).
-</ResponseField>
-
-<ResponseField name="amount" type="number">
-  The transfer amount in the major currency unit, exactly as submitted.
-</ResponseField>
-
-<ResponseField name="currency" type="string">
-  ISO 4217 currency code.
-</ResponseField>
-
-<ResponseField name="status" type="string">
-  Current state of the transfer. One of `pending`, `processing`, `success`, or `failed`.
-</ResponseField>
-
-<ResponseField name="narration" type="string">
-  The narration string sent to the destination bank.
-</ResponseField>
-
-<ResponseField name="reference" type="string">
-  The unique reference you provided when initiating the transfer.
-</ResponseField>
-
-<ResponseField name="destination" type="object">
-  Details of the recipient bank account.
-
-  <Expandable title="destination fields">
-    <ResponseField name="account_number" type="string">
-      The recipient's bank account number.
-    </ResponseField>
-
-    <ResponseField name="bank_code" type="string">
-      Clearing code of the recipient's bank.
-    </ResponseField>
-
-    <ResponseField name="account_name" type="string">
-      Registered name on the recipient account.
-    </ResponseField>
-  </Expandable>
-</ResponseField>
-
-<ResponseField name="created_at" type="string">
-  ISO 8601 timestamp of when the transfer was created.
-</ResponseField>
-
-<ResponseField name="completed_at" type="string">
-  ISO 8601 timestamp of when the transfer reached a terminal state (`success` or `failed`). `null` while the transfer is still in progress.
-</ResponseField>
-
-<ResponseField name="metadata" type="object">
-  Arbitrary key-value pairs you attached to the transfer at creation time. All values are strings. Returned as-is in subsequent reads and webhook payloads.
-</ResponseField>
-
-<ResponseField name="failure_reason" type="string">
-  Human-readable explanation of why the transfer failed. `null` for successful or in-progress transfers.
-</ResponseField>
-
-### Code Examples
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `amount` | number | Yes | Amount the recipient receives, in full. |
+| `bank_code` | string | Yes | Recipient bank code. See [bank codes](#bank-codes). |
+| `account_number` | string | Yes | Recipient account number |
+| `account_name` | string | Yes | Recipient account name, from Verify Account |
+| `reference` | string | Yes | Your unique reference. Used for idempotency. |
+| `narration` | string | No | Description shown to the recipient |
+| `bank_name` | string | No | Recipient bank name, for your records |
 
 <CodeGroup>
-
-```bash curl
-curl --request POST \
-  --url https://api.ndapi.io/v1/transfers \
-  --header 'Authorization: Bearer <API_KEY>' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "amount": 5000,
-    "currency": "NGN",
-    "destination": {
-      "account_number": "0987654321",
-      "bank_code": "044",
-      "account_name": "Kofi Mensah"
-    },
-    "narration": "Invoice #INV-0042 payment",
-    "reference": "payout-inv-0042",
-    "metadata": {
-      "invoice_id": "INV-0042",
-      "department": "finance"
-    }
+```bash cURL
+curl -X POST https://api.nolubz.com/v1/transfers \
+  -H "x-api-key: NDAPI-LIVE-your_live_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 50000,
+    "bank_code": "058",
+    "account_number": "0123456789",
+    "account_name": "JANE SMITH",
+    "reference": "PAYOUT-2026-001",
+    "narration": "Payment for order #1234"
   }'
 ```
 
 ```javascript Node.js
-const response = await fetch('https://api.ndapi.io/v1/transfers', {
-  method: 'POST',
+const res = await fetch("https://api.nolubz.com/v1/transfers", {
+  method: "POST",
   headers: {
-    'Authorization': 'Bearer <API_KEY>',
-    'Content-Type': 'application/json',
+    "x-api-key": process.env.NDAPI_API_KEY,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    amount: 5000,
-    currency: 'NGN',
-    destination: {
-      account_number: '0987654321',
-      bank_code: '044',
-      account_name: 'Kofi Mensah',
-    },
-    narration: 'Invoice #INV-0042 payment',
-    reference: 'payout-inv-0042',
-    metadata: {
-      invoice_id: 'INV-0042',
-      department: 'finance',
-    },
+    amount: 50000,
+    bank_code: "058",
+    account_number: "0123456789",
+    account_name: "JANE SMITH",
+    reference: "PAYOUT-2026-001",
+    narration: "Payment for order #1234",
   }),
 });
-
-const data = await response.json();
-console.log(data);
+const { data } = await res.json();
 ```
-
 </CodeGroup>
 
-**Example response**
-
-```json
+```json Response
 {
-  "status": "success",
+  "success": true,
+  "mode": "live",
   "data": {
-    "id": "txf_01HY2MNDP9KBZQR4WGFC7T",
-    "amount": 5000,
-    "currency": "NGN",
-    "status": "pending",
-    "narration": "Invoice #INV-0042 payment",
-    "reference": "payout-inv-0042",
-    "destination": {
-      "account_number": "0987654321",
-      "bank_code": "044",
-      "account_name": "Kofi Mensah"
-    },
-    "metadata": {
-      "invoice_id": "INV-0042",
-      "department": "finance"
-    },
-    "created_at": "2024-06-05T14:22:10Z",
-    "completed_at": null,
-    "failure_reason": null
+    "reference": "PAYOUT-2026-001",
+    "amount": 50000,
+    "fee": "<as per your agreement>",
+    "provider_fee": "<bank transfer charge>",
+    "net_amount": 50000,
+    "total_deducted": "<amount + fee + provider_fee>",
+    "currency": "<currency_code>",
+    "status": "completed",
+    "transaction_id": 42,
+    "provider_ref": "TRF-..."
   }
 }
 ```
 
----
+| Status | Meaning |
+| --- | --- |
+| `completed` | Funds delivered |
+| `pending` | Processing; watch for `transfer.success` or `transfer.failed` |
+| `failed` | Failed; balance restored automatically |
 
-## GET /transfers/:id
+## Bank codes
 
-Retrieve the current state of a specific transfer by its NDAPI ID. Poll this endpoint if you need synchronous confirmation, or prefer [webhooks](/api-reference/webhooks) for event-driven updates.
+Get the full, current list of supported banks and their codes from the API. It covers commercial, merchant, microfinance and fintech banks, and always matches the codes `POST /transfers` accepts.
 
-### Path Parameters
+`GET /banks`
 
-<ParamField path="id" type="string" required>
-  The unique ID of the transfer (e.g. `txf_01HY2MNDP9KBZQR4WGFC7T`).
-</ParamField>
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `search` | No | Filter by bank name, for example `opay` |
 
-### Response Fields
-
-The response object contains the same fields as the [POST /transfers](#post-transfers) response. See the field descriptions above.
-
-### Code Examples
-
-<CodeGroup>
-
-```bash curl
-curl --request GET \
-  --url https://api.ndapi.io/v1/transfers/txf_01HY2MNDP9KBZQR4WGFC7T \
-  --header 'Authorization: Bearer <API_KEY>'
+```bash
+curl "https://api.nolubz.com/v1/banks?search=nom" \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
 ```
 
-```javascript Node.js
-const id = 'txf_01HY2MNDP9KBZQR4WGFC7T';
-
-const response = await fetch(`https://api.ndapi.io/v1/transfers/${id}`, {
-  method: 'GET',
-  headers: {
-    'Authorization': 'Bearer <API_KEY>',
-  },
-});
-
-const data = await response.json();
-console.log(data);
-```
-
-</CodeGroup>
-
-**Example response**
-
-```json
+```json Response
 {
-  "status": "success",
+  "success": true,
   "data": {
-    "id": "txf_01HY2MNDP9KBZQR4WGFC7T",
-    "amount": 5000,
-    "currency": "NGN",
-    "status": "success",
-    "narration": "Invoice #INV-0042 payment",
-    "reference": "payout-inv-0042",
-    "destination": {
-      "account_number": "0987654321",
-      "bank_code": "044",
-      "account_name": "Kofi Mensah"
-    },
-    "metadata": {
-      "invoice_id": "INV-0042",
-      "department": "finance"
-    },
-    "created_at": "2024-06-05T14:22:10Z",
-    "completed_at": "2024-06-05T14:22:47Z",
-    "failure_reason": null
+    "country": "NG",
+    "count": 1,
+    "banks": [
+      { "code": "090645", "name": "Nombank" }
+    ]
   }
 }
 ```
 
----
+<Tip>
+  Load the list once and cache it in your app, for example to fill a bank picker. Don't hard-code bank codes; always use the codes from this endpoint.
+</Tip>
 
-## GET /transfers
-
-Return a paginated list of all transfers on your integration. Use the optional filters to narrow down by status, currency, or date range.
-
-### Query Parameters
-
-<ParamField query="page" type="integer">
-  Page number to retrieve. Defaults to `1`.
-</ParamField>
-
-<ParamField query="per_page" type="integer">
-  Number of records per page. Defaults to `20`. Maximum is `100`.
-</ParamField>
-
-<ParamField query="status" type="string">
-  Filter by transfer status. One of `pending`, `processing`, `success`, or `failed`.
-</ParamField>
-
-<ParamField query="currency" type="string">
-  Filter by ISO 4217 currency code. One of `NGN`, `GHS`, `KES`, `ZAR`.
-</ParamField>
-
-<ParamField query="date_from" type="string">
-  ISO 8601 date-time (inclusive lower bound). Example: `2024-01-01T00:00:00Z`.
-</ParamField>
-
-<ParamField query="date_to" type="string">
-  ISO 8601 date-time (inclusive upper bound). Example: `2024-06-30T23:59:59Z`.
-</ParamField>
-
-### Code Examples
-
-<CodeGroup>
-
-```bash curl
-curl --request GET \
-  --url 'https://api.ndapi.io/v1/transfers?page=1&per_page=20&status=success&currency=NGN&date_from=2024-06-01T00:00:00Z&date_to=2024-06-30T23:59:59Z' \
-  --header 'Authorization: Bearer <API_KEY>'
-```
-
-```javascript Node.js
-const params = new URLSearchParams({
-  page: '1',
-  per_page: '20',
-  status: 'success',
-  currency: 'NGN',
-  date_from: '2024-06-01T00:00:00Z',
-  date_to: '2024-06-30T23:59:59Z',
-});
-
-const response = await fetch(
-  `https://api.ndapi.io/v1/transfers?${params}`,
-  {
-    method: 'GET',
-    headers: {
-      'Authorization': 'Bearer <API_KEY>',
-    },
-  }
-);
-
-const data = await response.json();
-console.log(data);
-```
-
-</CodeGroup>
-
-**Example response**
-
-```json
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "txf_01HY2MNDP9KBZQR4WGFC7T",
-      "amount": 5000,
-      "currency": "NGN",
-      "status": "success",
-      "narration": "Invoice #INV-0042 payment",
-      "reference": "payout-inv-0042",
-      "destination": {
-        "account_number": "0987654321",
-        "bank_code": "044",
-        "account_name": "Kofi Mensah"
-      },
-      "created_at": "2024-06-05T14:22:10Z",
-      "completed_at": "2024-06-05T14:22:47Z",
-      "failure_reason": null
-    }
-  ],
-  "meta": {
-    "page": 1,
-    "per_page": 20,
-    "total": 1,
-    "total_pages": 1
-  }
-}
-```
+Can't find a bank? Contact [operator support](https://ndapi.nolubz.com/support).

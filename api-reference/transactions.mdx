@@ -1,237 +1,46 @@
 ---
-title: "Transactions API Reference — NDAPI Audit Trail Docs"
-sidebarTitle: "Transactions"
-description: "Query your NDAPI transaction history. List and retrieve individual credit and debit records with flexible date, currency, and type filters."
+title: "Transactions"
+description: "List your transactions or look one up by reference."
 ---
 
-Every movement of money on your NDAPI integration — whether an inbound credit to a virtual account or an outbound debit from a transfer — is recorded as a transaction. The transaction log is your immutable audit trail: each record captures the amount, direction, currency, and the running balance before and after the event. The endpoints below let you retrieve individual transactions and page through your full history with flexible filters.
+`GET /transactions`
 
----
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `reference` | none | Your reference. Returns that single transaction. |
+| `period` | `month` | `day`, `week`, `month` or `all` |
+| `type` | `all` | `deposit` or `withdrawal` |
+| `page` | `1` | Page number |
+| `limit` | `50` | Results per page, maximum `100` |
 
-## GET /transactions
+## List transactions
 
-Retrieve a paginated list of all transactions on your integration. You can filter by transaction type, currency, date range, or scope the results to a specific virtual account.
-
-### Query Parameters
-
-<ParamField query="page" type="integer">
-  Page number to retrieve. Defaults to `1`.
-</ParamField>
-
-<ParamField query="per_page" type="integer">
-  Number of records per page. Defaults to `20`. Maximum is `100`.
-</ParamField>
-
-<ParamField query="type" type="string">
-  Filter by transaction direction. Pass `credit` to see inbound payments or `debit` for outbound transfers.
-</ParamField>
-
-<ParamField query="currency" type="string">
-  Filter results to a specific ISO 4217 currency code. One of `NGN`, `GHS`, `KES`, `ZAR`.
-</ParamField>
-
-<ParamField query="date_from" type="string">
-  ISO 8601 date-time representing the inclusive start of your query window. Example: `2024-01-01T00:00:00Z`.
-</ParamField>
-
-<ParamField query="date_to" type="string">
-  ISO 8601 date-time representing the inclusive end of your query window. Example: `2024-06-30T23:59:59Z`.
-</ParamField>
-
-<ParamField query="virtual_account_id" type="string">
-  Scope results to transactions associated with a specific virtual account ID (e.g. `va_01HX4KBZQR9MNDP7T2WGFC`).
-</ParamField>
-
-### Response Fields
-
-<ResponseField name="id" type="string">
-  NDAPI-assigned unique identifier for the transaction (e.g. `txn_01HZ…`).
-</ResponseField>
-
-<ResponseField name="type" type="string">
-  Direction of the transaction. Either `credit` (money received) or `debit` (money sent).
-</ResponseField>
-
-<ResponseField name="amount" type="number">
-  Transaction amount in the major currency unit.
-</ResponseField>
-
-<ResponseField name="currency" type="string">
-  ISO 4217 currency code.
-</ResponseField>
-
-<ResponseField name="status" type="string">
-  Settlement status of the transaction. One of `pending`, `settled`, or `reversed`.
-</ResponseField>
-
-<ResponseField name="reference" type="string">
-  The reference associated with the originating event (e.g. the transfer `reference` or the payment sender's reference for credits).
-</ResponseField>
-
-<ResponseField name="description" type="string">
-  Human-readable description of the transaction. Sourced from the transfer narration or the inbound payment remark.
-</ResponseField>
-
-<ResponseField name="balance_before" type="number">
-  Your account balance in the major currency unit immediately before this transaction was applied.
-</ResponseField>
-
-<ResponseField name="balance_after" type="number">
-  Your account balance in the major currency unit immediately after this transaction was applied.
-</ResponseField>
-
-<ResponseField name="virtual_account_id" type="string">
-  ID of the virtual account that received or originated this transaction. `null` for transactions not linked to a virtual account.
-</ResponseField>
-
-<ResponseField name="transfer_id" type="string">
-  ID of the associated transfer record for debit transactions. `null` for credit transactions.
-</ResponseField>
-
-<ResponseField name="created_at" type="string">
-  ISO 8601 timestamp of when the transaction was recorded.
-</ResponseField>
-
-### Code Examples
-
-<CodeGroup>
-
-```bash curl
-curl --request GET \
-  --url 'https://api.ndapi.io/v1/transactions?page=1&per_page=20&type=credit&currency=NGN&date_from=2024-06-01T00:00:00Z&date_to=2024-06-30T23:59:59Z' \
-  --header 'Authorization: Bearer <API_KEY>'
+```bash
+curl "https://api.nolubz.com/v1/transactions?period=month&type=deposit&page=1" \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
 ```
 
-```javascript Node.js
-const params = new URLSearchParams({
-  page: '1',
-  per_page: '20',
-  type: 'credit',
-  currency: 'NGN',
-  date_from: '2024-06-01T00:00:00Z',
-  date_to: '2024-06-30T23:59:59Z',
-});
+## Look up by reference
 
-const response = await fetch(
-  `https://api.ndapi.io/v1/transactions?${params}`,
-  {
-    method: 'GET',
-    headers: {
-      'Authorization': 'Bearer <API_KEY>',
-    },
-  }
-);
-
-const data = await response.json();
-console.log(data);
+```bash
+curl "https://api.nolubz.com/v1/transactions?reference=ORDER-2026-001" \
+  -H "x-api-key: NDAPI-LIVE-your_live_key"
 ```
 
-</CodeGroup>
+Use this to reconcile if you missed a webhook. Test keys only see test transactions, and live keys only see live ones.
 
-**Example response**
+## Transaction fields
 
-```json
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "txn_01HZ8QRND4KBZP2MGFC7T9W",
-      "type": "credit",
-      "amount": 25000,
-      "currency": "NGN",
-      "status": "settled",
-      "reference": "sender-ref-7729",
-      "description": "Payment for Order #ORD-7729",
-      "balance_before": 125000.00,
-      "balance_after": 150000.00,
-      "virtual_account_id": "va_01HX4KBZQR9MNDP7T2WGFC",
-      "transfer_id": null,
-      "created_at": "2024-06-12T10:44:33Z"
-    },
-    {
-      "id": "txn_01HZ8SSND5KACP3NHGD8U1X",
-      "type": "debit",
-      "amount": 5000,
-      "currency": "NGN",
-      "status": "settled",
-      "reference": "payout-inv-0042",
-      "description": "Invoice #INV-0042 payment",
-      "balance_before": 150000.00,
-      "balance_after": 145000.00,
-      "virtual_account_id": null,
-      "transfer_id": "txf_01HY2MNDP9KBZQR4WGFC7T",
-      "created_at": "2024-06-12T14:22:47Z"
-    }
-  ],
-  "meta": {
-    "page": 1,
-    "per_page": 20,
-    "total": 2,
-    "total_pages": 1
-  }
-}
-```
+| Field | Description |
+| --- | --- |
+| `transaction_id` | NDAPI transaction ID |
+| `reference` | Your reference |
+| `type` | `deposit` or `withdrawal` |
+| `amount` | Gross amount |
+| `fee` | Fee as per your agreement |
+| `net_amount` | `amount - fee` |
+| `currency` | Currency code |
+| `status` | `completed`, `pending` or `failed` |
+| `created_at` | ISO 8601 timestamp |
 
----
-
-## GET /transactions/:id
-
-Retrieve full details of a single transaction by its NDAPI ID. Use this endpoint to look up a specific event by ID — for example, after receiving a webhook notification that includes a transaction ID.
-
-### Path Parameters
-
-<ParamField path="id" type="string" required>
-  The unique ID of the transaction (e.g. `txn_01HZ8QRND4KBZP2MGFC7T9W`).
-</ParamField>
-
-### Response Fields
-
-The response object contains the same fields as the [GET /transactions](#get-transactions) list items. See the field descriptions above.
-
-### Code Examples
-
-<CodeGroup>
-
-```bash curl
-curl --request GET \
-  --url https://api.ndapi.io/v1/transactions/txn_01HZ8QRND4KBZP2MGFC7T9W \
-  --header 'Authorization: Bearer <API_KEY>'
-```
-
-```javascript Node.js
-const id = 'txn_01HZ8QRND4KBZP2MGFC7T9W';
-
-const response = await fetch(`https://api.ndapi.io/v1/transactions/${id}`, {
-  method: 'GET',
-  headers: {
-    'Authorization': 'Bearer <API_KEY>',
-  },
-});
-
-const data = await response.json();
-console.log(data);
-```
-
-</CodeGroup>
-
-**Example response**
-
-```json
-{
-  "status": "success",
-  "data": {
-    "id": "txn_01HZ8QRND4KBZP2MGFC7T9W",
-    "type": "credit",
-    "amount": 25000,
-    "currency": "NGN",
-    "status": "settled",
-    "reference": "sender-ref-7729",
-    "description": "Payment for Order #ORD-7729",
-    "balance_before": 125000.00,
-    "balance_after": 150000.00,
-    "virtual_account_id": "va_01HX4KBZQR9MNDP7T2WGFC",
-    "transfer_id": null,
-    "created_at": "2024-06-12T10:44:33Z"
-  }
-}
-```
+See [Transactions and amounts](/concepts/transactions) for how the amount fields work.

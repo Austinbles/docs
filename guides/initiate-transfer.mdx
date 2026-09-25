@@ -1,264 +1,67 @@
 ---
-title: "Initiate Money Transfers and Track Status with NDAPI"
-sidebarTitle: "Initiate Transfer"
-description: "Learn how to send money using NDAPI transfers, track transfer states, handle failures with failure_reason, and confirm completion via webhooks."
+title: "Send a Transfer"
+description: "Verify the recipient, send the payout and confirm it with webhooks."
 ---
 
-Transfers let you push funds from your NDAPI wallet to any bank account. NDAPI processes transfers asynchronously — you submit the request, receive a `pending` status immediately, and get notified via webhook when the transfer completes or fails. This guide walks you through the full lifecycle from balance check to confirmation.
+## 0. Get the bank code
 
-## Sending a Transfer
+Fetch supported banks and their codes with [`GET /banks`](/api-reference/transfers#bank-codes), and let your user pick their bank.
 
-<Steps>
+## 1. Verify the recipient
 
-  <Step title="Check your account balance">
-    Before submitting a transfer, confirm you have sufficient funds. Query the `/balance` endpoint to get your current available balance.
-
-    <CodeGroup>
-
-    ```bash curl
-    curl --request GET \
-      --url https://api.ndapi.io/v1/balance \
-      --header 'Authorization: Bearer YOUR_API_KEY'
-    ```
-
-    ```javascript Node.js
-    const response = await fetch('https://api.ndapi.io/v1/balance', {
-      headers: {
-        Authorization: 'Bearer YOUR_API_KEY',
-      },
-    });
-
-    const { status, data } = await response.json();
-    console.log(`Available balance: ${data.available} ${data.currency}`);
-    ```
-
-    </CodeGroup>
-
-    ```json Sample balance response
-    {
-      "status": "success",
-      "data": {
-        "available": 250000.00,
-        "ledger": 260000.00,
-        "currency": "NGN"
-      }
-    }
-    ```
-
-    Use the `available` figure — not `ledger` — when deciding whether a transfer can proceed. The `ledger` balance includes funds that are reserved for pending transactions.
-  </Step>
-
-  <Step title="Validate the destination account details">
-    Incorrect account details are the most common cause of failed transfers, and failed transfers can take time to reverse. Before calling `/transfers`, verify the destination by checking the account number and bank code carefully.
-
-    - **`bank_code`** must be the official CBN-assigned code for the recipient's bank (e.g. `"058"` for GTBank, `"011"` for First Bank). An incorrect code routes the transfer to the wrong institution.
-    - **`account_number`** must be the 10-digit NUBAN number exactly as issued by the recipient's bank.
-    - **`account_name`** should match the name on record at the destination bank. Some banks perform name-matching validation and may reject mismatches.
-
-    <Note>
-      NDAPI offers an account name enquiry endpoint at `GET /resolve-account?account_number=&bank_code=` that returns the registered account name before you commit funds. Use it to give your users a confirmation screen.
-    </Note>
-  </Step>
-
-  <Step title="Initiate the transfer">
-    Send a `POST` request to `/transfers` with the amount, destination details, and your unique reference.
-
-    <CodeGroup>
-
-    ```bash curl
-    curl --request POST \
-      --url https://api.ndapi.io/v1/transfers \
-      --header 'Authorization: Bearer YOUR_API_KEY' \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "amount": 5000.00,
-        "currency": "NGN",
-        "destination": {
-          "account_number": "0123456789",
-          "bank_code": "058",
-          "account_name": "John Doe"
-        },
-        "narration": "Payment for services",
-        "reference": "TRF-20240101-001"
-      }'
-    ```
-
-    ```javascript Node.js
-    const response = await fetch('https://api.ndapi.io/v1/transfers', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer YOUR_API_KEY',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: 5000.00,
-        currency: 'NGN',
-        destination: {
-          account_number: '0123456789',
-          bank_code: '058',
-          account_name: 'John Doe',
-        },
-        narration: 'Payment for services',
-        reference: 'TRF-20240101-001',
-      }),
-    });
-
-    const { status, data } = await response.json();
-
-    if (status !== 'success') {
-      throw new Error(`Transfer initiation failed: ${data.message}`);
-    }
-
-    console.log(`Transfer created with ID: ${data.id}, status: ${data.status}`);
-    ```
-
-    </CodeGroup>
-
-    ### Request body parameters
-
-    <ParamField body="amount" type="number" required>
-      The amount to transfer, expressed in major currency units (e.g. `5000.00` for ₦5,000). Do not pass kobo or subunit values — NDAPI always works in the major unit.
-    </ParamField>
-
-    <ParamField body="currency" type="string" required>
-      ISO 4217 currency code, e.g. `"NGN"`. Must match the currency of your NDAPI wallet.
-    </ParamField>
-
-    <ParamField body="destination" type="object" required>
-      An object describing where funds should be sent.
-
-      <ParamField body="destination.account_number" type="string" required>
-        10-digit NUBAN account number of the recipient.
-      </ParamField>
-
-      <ParamField body="destination.bank_code" type="string" required>
-        CBN-assigned bank code for the recipient's bank. See your dashboard for the full bank list.
-      </ParamField>
-
-      <ParamField body="destination.account_name" type="string" required>
-        Name registered on the destination account. Used for validation and display purposes.
-      </ParamField>
-    </ParamField>
-
-    <ParamField body="narration" type="string" required>
-      A short description that appears on the recipient's bank statement. Maximum 100 characters.
-    </ParamField>
-
-    <ParamField body="reference" type="string" required>
-      Your unique identifier for this transfer request. Acts as an idempotency key — see the warning below for details.
-    </ParamField>
-
-    <ParamField body="metadata" type="object">
-      Optional key-value pairs stored alongside the transfer record. Useful for linking to internal order or payment IDs.
-    </ParamField>
-
-    <Warning>
-      **Always use a unique `reference` per transfer.** NDAPI treats the `reference` as an idempotency key: submitting a second request with the same `reference` will not create a new transfer — it will return the original transfer object unchanged. This protects you from accidental double-payments caused by retries, but it also means you must generate a fresh reference for each genuinely new transfer.
-    </Warning>
-
-  </Step>
-
-  <Step title="Capture the transfer ID from the response">
-    A successful request returns an immediate `200 OK` with a transfer object in `pending` status. Store the `id` field (`trf_…`) in your database — you'll use it to poll for status updates or match incoming webhooks.
-
-    ```json Sample response
-    {
-      "status": "success",
-      "data": {
-        "id": "trf_01HABC789",
-        "amount": 5000.00,
-        "currency": "NGN",
-        "status": "pending",
-        "narration": "Payment for services",
-        "reference": "TRF-20240101-001",
-        "destination": {
-          "account_number": "0123456789",
-          "bank_code": "058",
-          "account_name": "John Doe",
-          "bank_name": "GTBank"
-        },
-        "created_at": "2024-01-15T10:00:00Z",
-        "completed_at": null,
-        "failure_reason": null
-      }
-    }
-    ```
-
-    The `pending` status means the transfer has been accepted and queued. Most transfers complete within seconds, though bank processing times can occasionally extend this to a few minutes.
-  </Step>
-
-  <Step title="Poll or use webhooks to track status">
-    NDAPI supports two approaches for confirming a transfer outcome:
-
-    **Option A — Webhooks (recommended).** Register a webhook endpoint and listen for `transfer.success` or `transfer.failed` events. This is the most efficient approach and removes the need for polling. See the [Webhooks guide](/guides/handle-webhooks).
-
-    **Option B — Status polling.** Query `GET /transfers/:id` on an interval (start at 5 seconds, increase with each attempt) until `status` moves out of `pending`. Avoid polling more frequently than once every 5 seconds to stay within rate limits.
-
-    Transfer `status` values:
-
-    | Status | Meaning |
-    |---|---|
-    | `pending` | Accepted and queued for processing |
-    | `processing` | Submitted to the destination bank |
-    | `success` | Funds delivered; `completed_at` is set |
-    | `failed` | Transfer could not be completed; check `failure_reason` |
-    | `reversed` | Previously successful transfer has been reversed |
-  </Step>
-
-</Steps>
-
----
-
-## Checking Transfer Status
-
-Fetch the latest state of a transfer at any time using its `id`.
-
-<CodeGroup>
-
-```bash curl
-curl --request GET \
-  --url https://api.ndapi.io/v1/transfers/trf_01HABC789 \
-  --header 'Authorization: Bearer YOUR_API_KEY'
+```bash
+curl -X POST https://api.nolubz.com/v1/virtual-accounts/verify \
+  -H "x-api-key: NDAPI-LIVE-your_live_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "account_number": "0123456789", "bank_code": "058" }'
 ```
 
-```javascript Node.js
-const response = await fetch(
-  'https://api.ndapi.io/v1/transfers/trf_01HABC789',
-  {
-    headers: {
-      Authorization: 'Bearer YOUR_API_KEY',
-    },
-  }
-);
+Show the returned `data.account_name` to your user and get confirmation before sending.
 
-const { status, data } = await response.json();
-console.log(`Transfer status: ${data.status}`);
+## 2. Send the transfer
 
-if (data.status === 'failed') {
-  console.error(`Failure reason: ${data.failure_reason}`);
+Generate a unique reference and save it **before** you call the API, so a retry reuses it.
+
+```javascript
+const reference = `payout-${userId}-${Date.now()}`;
+await saveReference(payoutId, reference);
+
+const res = await fetch("https://api.nolubz.com/v1/transfers", {
+  method: "POST",
+  headers: {
+    "x-api-key": process.env.NDAPI_API_KEY,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    amount: 50000,
+    bank_code: "058",
+    account_number: "0123456789",
+    account_name: "JANE SMITH",
+    reference,
+    narration: "Payout for order #1234",
+  }),
+});
+```
+
+## 3. Handle the result
+
+| Response | What to do |
+| --- | --- |
+| `status: completed` | Mark the payout done. |
+| `status: pending` | Wait for `transfer.success` or `transfer.failed`. |
+| `status: failed` | Your balance is restored. Tell your user. |
+| HTTP `409` | Already processed. Read `original_transaction.status`. |
+| Timeout or `5xx` | Retry with the **same** reference. |
+
+## 4. Confirm with webhooks
+
+```javascript
+switch (event) {
+  case "transfer.success":
+    await markPayoutDone(data.reference);
+    break;
+  case "transfer.failed":
+    await markPayoutFailed(data.reference, data.error);
+    break;
 }
 ```
-
-</CodeGroup>
-
----
-
-## Handling Transfer Failures
-
-When a transfer lands in `failed` status, the `failure_reason` field in the response tells you what went wrong. Here are the most common reasons and how to respond:
-
-| `failure_reason` | What happened | What to do |
-|---|---|---|
-| `INSUFFICIENT_BALANCE` | Your wallet didn't have enough funds at the time of processing | Top up your NDAPI wallet and initiate a new transfer with a fresh `reference` |
-| `INVALID_ACCOUNT_DETAILS` | The destination account number or bank code was rejected by the receiving bank | Verify the details with your customer and re-initiate |
-| `BANK_TRANSFER_LIMIT_EXCEEDED` | The amount exceeds the receiving bank's per-transaction limit | Ask the customer to receive a smaller amount, or split the transfer |
-| `BENEFICIARY_BANK_UNAVAILABLE` | The destination bank was temporarily unreachable | Retry after a short delay; NDAPI may attempt this automatically depending on your configuration |
-| `DUPLICATE_TRANSACTION` | The receiving bank flagged this as a duplicate | Wait and check whether the first attempt eventually settled |
-
-<Warning>
-  Do **not** retry a failed transfer using the same `reference`. A failed transfer has been voided and your funds are not in transit. To retry, create a new transfer request with a fresh unique `reference`. Reusing the old reference will just return the original failed record.
-</Warning>
-
-<Tip>
-  Log the full transfer response object — including `failure_reason` — to your internal system whenever a transfer fails. This gives your support team the context they need to assist customers without requiring an additional API call.
-</Tip>

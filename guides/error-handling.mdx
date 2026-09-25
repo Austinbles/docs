@@ -1,224 +1,66 @@
 ---
-title: "Handle API Errors Gracefully in Your NDAPI Integration"
-sidebarTitle: "Error Handling"
-description: "Understand NDAPI error response format, HTTP status codes, application error codes, and how to build a retry strategy for your integration."
+title: "Error Handling and Idempotency"
+description: "Retry safely, handle duplicates and build a reliable integration."
 ---
 
-Every API integration encounters errors — the difference between a brittle system and a resilient one is how gracefully your code handles them. NDAPI uses a consistent, predictable error format across all endpoints so you can write error-handling logic once and apply it everywhere. This guide covers the response shape, what each status code means, the full list of machine-readable error codes, and a practical retry strategy.
+## Idempotency
 
----
+The `reference` on a transfer (and `merchant_tx_ref` on a virtual account) is your idempotency key.
 
-## Error Response Format
+- If a request times out or returns `5xx`, retry with the **same** reference.
+- If the original request was already processed, you get HTTP `409` with the original transaction. Nothing is processed twice.
+- If it wasn't processed, the retry is processed normally.
 
-When a request cannot be completed, NDAPI always returns a JSON object with `status` set to `"error"`, a machine-readable `code`, a human-readable `message`, and an optional `details` object that may carry field-level validation data.
+<Tip>
+  A good reference pattern is `{your-app}-{user-id}-{timestamp}`. Save it before calling the API.
+</Tip>
 
-```json Error response structure
+### 409 response
+
+```json
 {
-  "status": "error",
-  "code": "INSUFFICIENT_BALANCE",
-  "message": "Your account balance is insufficient to complete this transfer.",
-  "details": {}
+  "success": false,
+  "error": "Duplicate reference",
+  "code": "DUPLICATE_REFERENCE",
+  "original_transaction": {
+    "transaction_id": 12345,
+    "reference": "PAYOUT-2026-001",
+    "status": "completed",
+    "amount": 50000,
+    "net_amount": 50000,
+    "currency": "<currency_code>",
+    "created_at": "2026-09-22T14:00:00Z"
+  },
+  "hint": "Check original_transaction.status."
 }
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `status` | string | Always `"error"` for failed requests |
-| `code` | string | Machine-readable error code — use this in your `switch` statements, not `message` |
-| `message` | string | A human-readable description suitable for logging; may change between versions |
-| `details` | object | Optional. For validation errors (400/422), contains per-field error information |
+A `409` means the new request was **rejected**; the original transaction stands. Only use a **new** reference if `original_transaction.status` is `failed` and you want to try again.
 
-<Note>
-  Branch your error-handling logic on `code`, not `message`. The `message` string is intended for developers and may be updated to improve clarity in future API versions. The `code` values are stable and versioned.
-</Note>
+## Retry strategy
 
----
+| Situation | Retry? |
+| --- | --- |
+| Timeout, `500` | Yes, with the same reference and exponential backoff |
+| `429` | Yes, after the `Retry-After` seconds |
+| `400`, `401`, `403`, `404` | No. Fix the request first |
+| `409` | No. Read the original transaction's status |
 
-## HTTP Status Codes
+## Best practices
 
-NDAPI maps errors to standard HTTP status codes. Use the status code as your first signal for how to react.
+**Security**
+- Keep API keys and the webhook secret in environment variables, never in code or client apps.
+- Call NDAPI only from your backend, over HTTPS.
+- Always verify webhook signatures.
 
-| Code | Name | When you'll see it |
-|---|---|---|
-| `400` | Bad Request | A required field is missing, a value is the wrong type, or a parameter fails basic validation |
-| `401` | Unauthorized | The `Authorization` header is absent or the API key is invalid / expired |
-| `403` | Forbidden | Your API key is valid but does not have permission for the requested operation or resource |
-| `404` | Not Found | The resource ID in the path does not exist or does not belong to your account |
-| `409` | Conflict | A resource with the same `reference` or unique key already exists — idempotency conflict |
-| `422` | Unprocessable Entity | The request is structurally valid JSON but semantically invalid (e.g. transfer amount exceeds your daily limit) |
-| `429` | Too Many Requests | You have exceeded the rate limit. Respect the `Retry-After` header |
-| `500` | Internal Server Error | An unexpected error on NDAPI's side. These are rare — retry with exponential backoff |
+**Reliability**
+- Verify account names before every transfer.
+- Use a unique reference for every transfer.
+- Make your webhook handler idempotent.
+- Subscribe to `balance.low` so you top up before transfers fail.
 
----
+**Testing**
+- Test every flow with your `NDAPI-TEST-` key before going live.
+- Test `transfer.failed`, `409` duplicates and webhook retries.
 
-## Error Codes Reference
-
-| Code | Meaning | Suggested resolution |
-|---|---|---|
-| `INVALID_API_KEY` | The API key provided is incorrect, malformed, or has been revoked | Verify the key in your [dashboard](https://dashboard.ndapi.io/api-keys) and ensure it is passed as `Bearer YOUR_API_KEY` in the `Authorization` header |
-| `INSUFFICIENT_BALANCE` | Your NDAPI wallet does not hold enough funds to cover the requested transfer | Top up your account balance via the dashboard and retry with a new `reference` |
-| `INVALID_ACCOUNT_DETAILS` | The destination `account_number` and `bank_code` combination could not be validated by the receiving bank | Double-check both values against the issuing bank's records; use the `/resolve-account` endpoint to pre-validate |
-| `DUPLICATE_REFERENCE` | A request with this `reference` has already been processed | Retrieve the existing resource using `GET /transfers/:id` or `GET /virtual-accounts` filtered by `reference` — do not submit a new request |
-| `RATE_LIMIT_EXCEEDED` | Your integration has sent too many requests in a short period | Pause requests, read the `Retry-After` response header (value is seconds), wait that duration, then resume with exponential backoff |
-| `VIRTUAL_ACCOUNT_SUSPENDED` | The virtual account you are operating on has been suspended by NDAPI or a compliance review | Contact [NDAPI support](https://dashboard.ndapi.io/support) with the account `id` to understand and resolve the suspension |
-| `TRANSFER_LIMIT_EXCEEDED` | The requested transfer amount exceeds the per-transaction or daily limit configured for your account | Split the transfer into smaller amounts, or contact support to request a limit increase |
-
----
-
-## Retry Strategy
-
-Not all errors are permanent. A solid retry strategy distinguishes between errors you can recover from automatically and errors that require a code or configuration fix.
-
-<Steps>
-
-  <Step title="Check the HTTP status code">
-    As soon as you receive an error response, inspect the HTTP status code:
-
-    - **`2xx`** — Success. No retry needed.
-    - **`4xx`** — Client error. The problem is in your request. **Do not retry the same request** — fix the issue first (see the table above), then submit a corrected request.
-    - **`429`** — Rate limited. Retryable, but only after waiting. Read the `Retry-After` header.
-    - **`5xx`** — Server error on NDAPI's side. Retryable with backoff.
-  </Step>
-
-  <Step title="If 5xx, retry with exponential backoff">
-    Transient server errors can usually be resolved by retrying. Use exponential backoff to avoid overwhelming the API and to give NDAPI time to recover.
-
-    ```javascript Node.js
-    async function requestWithRetry(url, options, maxRetries = 4) {
-      let attempt = 0;
-
-      while (attempt <= maxRetries) {
-        const response = await fetch(url, options);
-
-        if (response.ok) {
-          return response.json();
-        }
-
-        const status = response.status;
-
-        // Do not retry 4xx errors (except 429)
-        if (status >= 400 && status < 500 && status !== 429) {
-          const errorBody = await response.json();
-          throw new Error(`Non-retryable error ${status}: ${errorBody.code}`);
-        }
-
-        // Handle rate limits
-        if (status === 429) {
-          const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
-          console.warn(`Rate limited. Retrying after ${retryAfter}s`);
-          await sleep(retryAfter * 1000);
-          continue; // Don't increment attempt for rate limits — this isn't a server error
-        }
-
-        // 5xx: exponential backoff
-        const delay = Math.min(1000 * 2 ** attempt, 30000); // cap at 30 seconds
-        console.warn(`Server error ${status}. Retrying in ${delay}ms (attempt ${attempt + 1})`);
-        await sleep(delay);
-        attempt++;
-      }
-
-      throw new Error(`Request failed after ${maxRetries} retries`);
-    }
-
-    function sleep(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-    ```
-  </Step>
-
-  <Step title="If 4xx (except 429), fix the request — do not retry">
-    A `4xx` error means NDAPI understood your request and rejected it for a specific, correctable reason. Retrying the same request will return the same error. Instead:
-
-    - Parse the `code` field from the response body.
-    - Look up the recommended resolution in the table above.
-    - Fix the underlying issue (wrong parameter, missing field, insufficient balance, etc.).
-    - Submit a new corrected request — with a **new `reference`** if the original was for a transfer.
-
-    ```javascript Node.js
-    const { status: httpStatus } = response;
-    const { code, message } = await response.json();
-
-    if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 429) {
-      // Log for your support team, surface to your user if appropriate
-      console.error(`NDAPI error [${code}]: ${message}`);
-
-      switch (code) {
-        case 'INSUFFICIENT_BALANCE':
-          await notifyOperationsTeam('Top-up required before transfer can proceed');
-          break;
-        case 'INVALID_ACCOUNT_DETAILS':
-          throw new UserFacingError('We could not verify the destination account. Please check the details and try again.');
-        case 'DUPLICATE_REFERENCE':
-          // Safe to look up the original
-          return fetchExistingResource(reference);
-        default:
-          throw new Error(`Unhandled API error: ${code}`);
-      }
-    }
-    ```
-  </Step>
-
-</Steps>
-
----
-
-## Frequently Asked Questions
-
-<Accordion title="What should I do if I get a 409 Conflict?">
-  A `409` with code `DUPLICATE_REFERENCE` means you've sent a request using a `reference` that is already associated with an existing resource. NDAPI's idempotency guarantee means the original resource was created successfully and no new one will be created.
-
-  The correct response is to **retrieve the existing resource** rather than submitting a new request:
-
-  ```javascript Node.js
-  // For transfers
-  const existing = await fetch(
-    `https://api.ndapi.io/v1/transfers?reference=TRF-20240101-001`,
-    { headers: { Authorization: 'Bearer YOUR_API_KEY' } }
-  );
-
-  // For virtual accounts
-  const existing = await fetch(
-    `https://api.ndapi.io/v1/virtual-accounts?reference=VA-001`,
-    { headers: { Authorization: 'Bearer YOUR_API_KEY' } }
-  );
-  ```
-
-  If you genuinely need to create a new resource (e.g. a new transfer to the same destination), generate a fresh, unique `reference` value.
-</Accordion>
-
-<Accordion title="How do I handle rate limits?">
-  When NDAPI returns `429 Too Many Requests`, the response includes a `Retry-After` header whose value is the number of seconds you must wait before making another request.
-
-  ```bash Sample rate-limit response headers
-  HTTP/2 429
-  Retry-After: 12
-  Content-Type: application/json
-  ```
-
-  Best practices for avoiding rate limits in the first place:
-
-  - **Batch where possible.** If your use case involves creating many virtual accounts, spread requests over time rather than firing them all at once.
-  - **Cache balance reads.** The `/balance` endpoint is frequently hit. Cache the result for a few seconds on your side — balance figures don't change between milliseconds.
-  - **Implement a token-bucket client-side.** Shape your outgoing request rate to stay comfortably within limits rather than reacting to `429` responses after the fact.
-  - **Contact support for higher limits.** If your production workload legitimately requires a higher rate limit, reach out via [dashboard.ndapi.io/support](https://dashboard.ndapi.io/support).
-</Accordion>
-
-<Accordion title="Why did my transfer return INVALID_ACCOUNT_DETAILS?">
-  `INVALID_ACCOUNT_DETAILS` usually means one of three things:
-
-  1. **Wrong `bank_code`.** Each Nigerian bank has a unique 3-digit CBN code. Using the wrong code routes the lookup to the wrong institution, which then can't find the account number. Cross-reference your `bank_code` against the [NDAPI bank list](https://dashboard.ndapi.io/banks).
-
-  2. **Incorrectly formatted `account_number`.** Nigerian NUBAN account numbers are exactly 10 digits. Verify there are no leading spaces, hyphens, or missing digits.
-
-  3. **The account does not accept the currency you specified.** Some accounts are not enabled for certain currencies or transaction types by the holding bank.
-
-  The fastest way to debug this is to call the account resolution endpoint **before** initiating a transfer:
-
-  ```bash curl
-  curl --request GET \
-    --url 'https://api.ndapi.io/v1/resolve-account?account_number=0123456789&bank_code=058' \
-    --header 'Authorization: Bearer YOUR_API_KEY'
-  ```
-
-  If resolution fails, the account details are invalid. Collect corrected details from the recipient before proceeding.
-</Accordion>
+See all status codes in [Errors](/api-reference/errors).

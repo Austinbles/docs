@@ -1,333 +1,101 @@
 ---
-title: "Handle and Verify NDAPI Webhooks in Your Application"
-sidebarTitle: "Webhooks"
-description: "Register a webhook endpoint, verify NDAPI event signatures with HMAC-SHA256, and process payment events reliably with retry-safe idempotency."
+title: "Handle Webhooks"
+description: "Set up your endpoint, verify signatures, and process events safely."
 ---
 
-Webhooks are the most reliable way to react to payment events in real time. Instead of polling the API for status changes, you register an HTTPS endpoint and NDAPI delivers a signed POST request the moment something happens — a virtual account receives a credit, a transfer completes, or a transfer fails. This guide covers everything from standing up a receiver to verifying signatures and processing events safely.
+## Set up your endpoint
 
-## Setting Up Your Webhook Handler
+Your endpoint must be public, use HTTPS, and return HTTP `200` within 10 seconds. Send your webhook URL to [operator support](https://ndapi.nolubz.com/support), or set it in your Operator Dashboard.
 
-<Steps>
+Webhooks don't come from fixed IP addresses. Don't filter them by IP; verify the signature instead.
 
-  <Step title="Create a webhook endpoint in your app">
-    Your endpoint must be publicly reachable over HTTPS, accept `POST` requests with a JSON body, and return an HTTP `200` response quickly (within 10 seconds). Do all heavy processing asynchronously — see the tip at the end of this guide.
+## Verify the signature
 
-    <Tabs>
+Every webhook carries two headers:
 
-      <Tab title="Node.js (Express)">
-        ```javascript Node.js
-        const express = require('express');
-        const crypto = require('crypto');
+| Header | Content |
+| --- | --- |
+| `x-ndapi-signature` | `Base64(HMAC-SHA256(webhook_secret, raw_request_body))` |
+| `x-ndapi-timestamp` | ISO 8601 time the webhook was sent |
 
-        const app = express();
-
-        // Use raw body parser so we can verify the signature
-        app.use(
-          '/webhooks/ndapi',
-          express.raw({ type: 'application/json' })
-        );
-
-        app.post('/webhooks/ndapi', (req, res) => {
-          const signature = req.headers['x-ndapi-signature'];
-          const rawBody = req.body; // Buffer
-
-          if (!verifySignature(process.env.NDAPI_WEBHOOK_SECRET, rawBody, signature)) {
-            return res.status(401).json({ error: 'Invalid signature' });
-          }
-
-          const event = JSON.parse(rawBody);
-
-          // Hand off to your async processor — do not block here
-          processEvent(event).catch(console.error);
-
-          // Acknowledge receipt immediately
-          res.status(200).json({ received: true });
-        });
-
-        app.listen(3000, () => console.log('Webhook listener running on port 3000'));
-        ```
-      </Tab>
-
-      <Tab title="Python (Flask)">
-        ```python Python
-        import os
-        import hmac
-        import hashlib
-        import json
-        from flask import Flask, request, jsonify
-
-        app = Flask(__name__)
-
-        @app.route('/webhooks/ndapi', methods=['POST'])
-        def handle_webhook():
-            signature = request.headers.get('X-NDAPI-Signature', '')
-            raw_body = request.get_data()  # bytes — must be raw, not parsed
-
-            if not verify_signature(os.environ['NDAPI_WEBHOOK_SECRET'], raw_body, signature):
-                return jsonify({'error': 'Invalid signature'}), 401
-
-            event = json.loads(raw_body)
-
-            # Hand off to an async worker (e.g. Celery task)
-            process_event.delay(event)
-
-            return jsonify({'received': True}), 200
-
-        if __name__ == '__main__':
-            app.run(port=3000)
-        ```
-      </Tab>
-
-    </Tabs>
-
-    <Warning>
-      Always parse the request body **after** signature verification, and ensure you pass the **raw bytes** to the verification function — not a re-serialised JSON string. Even a single added or removed space will invalidate the HMAC digest.
-    </Warning>
-  </Step>
-
-  <Step title="Register the endpoint with NDAPI">
-    Once your endpoint is deployed and reachable, register it via the API so NDAPI knows where to deliver events.
-
-    <CodeGroup>
-
-    ```bash curl
-    curl --request POST \
-      --url https://api.ndapi.io/v1/webhooks \
-      --header 'Authorization: Bearer YOUR_API_KEY' \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "url": "https://yourapp.example.com/webhooks/ndapi",
-        "events": [
-          "virtual_account.credited",
-          "transfer.success",
-          "transfer.failed"
-        ],
-        "description": "Production webhook — payment events"
-      }'
-    ```
-
-    ```javascript Node.js
-    const response = await fetch('https://api.ndapi.io/v1/webhooks', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer YOUR_API_KEY',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: 'https://yourapp.example.com/webhooks/ndapi',
-        events: [
-          'virtual_account.credited',
-          'transfer.success',
-          'transfer.failed',
-        ],
-        description: 'Production webhook — payment events',
-      }),
-    });
-
-    const { status, data } = await response.json();
-    console.log('Webhook registered. Secret:', data.secret);
-    ```
-
-    </CodeGroup>
-
-    NDAPI returns a `secret` in the registration response. Copy this value immediately and store it as an environment variable (e.g. `NDAPI_WEBHOOK_SECRET`) — it is shown only once and you'll need it for every signature verification.
-
-    ```json Sample registration response
-    {
-      "status": "success",
-      "data": {
-        "id": "wh_01HDEF321",
-        "url": "https://yourapp.example.com/webhooks/ndapi",
-        "events": ["virtual_account.credited", "transfer.success", "transfer.failed"],
-        "status": "active",
-        "secret": "whsec_a1b2c3d4e5f6...",
-        "created_at": "2024-01-15T10:00:00Z"
-      }
-    }
-    ```
-
-    <Note>
-      You can subscribe to all event types by passing `"events": ["*"]` — useful during development. In production, subscribe only to the events your application actually needs.
-    </Note>
-  </Step>
-
-  <Step title="Verify the signature">
-    Every request NDAPI sends to your endpoint includes an `X-NDAPI-Signature` header. The value is formatted as `sha256=<hex_digest>`, where the digest is an HMAC-SHA256 of the **raw request body bytes** using your webhook secret.
-
-    Always verify this header before acting on any event. Reject any request where verification fails.
-
-    <CodeGroup>
-
-    ```javascript Node.js
-    const crypto = require('crypto');
-
-    function verifySignature(secret, payload, signature) {
-      const expected =
-        'sha256=' +
-        crypto.createHmac('sha256', secret).update(payload).digest('hex');
-
-      // Use timingSafeEqual to prevent timing attacks
-      return crypto.timingSafeEqual(
-        Buffer.from(expected),
-        Buffer.from(signature)
-      );
-    }
-    ```
-
-    ```python Python
-    import hmac
-    import hashlib
-
-    def verify_signature(secret: str, payload: bytes, signature: str) -> bool:
-        expected = 'sha256=' + hmac.new(
-            secret.encode(), payload, hashlib.sha256
-        ).hexdigest()
-
-        # Use compare_digest to prevent timing attacks
-        return hmac.compare_digest(expected, signature)
-    ```
-
-    </CodeGroup>
-
-    <Warning>
-      **Never skip signature verification**, even during development. Skipping verification means any actor who discovers your webhook URL can send arbitrary payloads and trigger your business logic — including fake payment confirmations.
-    </Warning>
-  </Step>
-
-  <Step title="Parse and handle the event">
-    After verification, parse the JSON body and branch on the `event` field to run the appropriate logic for each event type.
-
-    ```javascript Node.js
-    async function processEvent(event) {
-      // Use the event ID to prevent double-processing
-      const alreadyProcessed = await db.events.findOne({ id: event.id });
-      if (alreadyProcessed) {
-        console.log(`Event ${event.id} already processed — skipping`);
-        return;
-      }
-
-      switch (event.event) {
-        case 'virtual_account.credited': {
-          const { reference, amount, currency, sender_name } = event.data;
-          // Look up your internal record using the reference you assigned
-          const account = await db.virtualAccounts.findOne({ reference });
-          if (account) {
-            await db.transactions.create({
-              accountId: account.id,
-              amount,
-              currency,
-              senderName: sender_name,
-              ndapiEventId: event.id,
-            });
-            await notifyCustomer(account.customerId, amount, currency);
-          }
-          break;
-        }
-
-        case 'transfer.success': {
-          const { id: transferId, reference, completed_at } = event.data;
-          await db.transfers.update(
-            { reference },
-            { status: 'success', completedAt: completed_at, ndapiTransferId: transferId }
-          );
-          break;
-        }
-
-        case 'transfer.failed': {
-          const { reference, failure_reason } = event.data;
-          await db.transfers.update(
-            { reference },
-            { status: 'failed', failureReason: failure_reason }
-          );
-          await alertOperationsTeam(reference, failure_reason);
-          break;
-        }
-
-        default:
-          console.log(`Unhandled event type: ${event.event}`);
-      }
-
-      // Mark event as processed to enforce idempotency
-      await db.events.create({ id: event.id, processedAt: new Date() });
-    }
-    ```
-  </Step>
-
-  <Step title="Return HTTP 200 immediately">
-    Your endpoint must respond with `200 OK` as fast as possible — before doing any database writes or downstream calls. NDAPI waits up to **10 seconds** for a response. If the response times out or returns a non-2xx status, NDAPI treats the delivery as failed and schedules a retry.
-
-    The correct pattern is:
-
-    1. Verify the signature.
-    2. Enqueue the event for asynchronous processing.
-    3. Return `200` immediately.
-
-    <Tip>
-      Use a job queue like **BullMQ** (Node.js) or **Celery** (Python) to process events asynchronously. This keeps your webhook endpoint responsive, lets you retry failed jobs independently of NDAPI's retry schedule, and makes it easy to replay events during debugging.
-    </Tip>
-  </Step>
-
-</Steps>
-
----
-
-## NDAPI Retry Policy
-
-If your endpoint returns a non-`2xx` response or times out, NDAPI retries delivery with exponential backoff:
-
-| Attempt | Delay after previous attempt |
-|---|---|
-| 1st retry | 5 seconds |
-| 2nd retry | 30 seconds |
-| 3rd retry | 5 minutes |
-| 4th retry | 30 minutes |
-| 5th retry | 2 hours |
-
-After 5 failed attempts, the delivery is marked as **failed** and no further retries are made. You can manually replay a specific event from the [NDAPI dashboard](https://dashboard.ndapi.io/webhooks).
-
-Because retries mean the same event can arrive more than once, your handler **must be idempotent**. The cleanest approach is to store the event `id` in your database and skip processing if you've already seen it — exactly as shown in the code example above.
-
----
-
-## Listing Your Registered Webhooks
+<Warning>
+  Compute the signature over the **raw request body bytes exactly as received**. Do not parse the JSON and serialize it again first; that changes the bytes and the signature will not match.
+</Warning>
 
 <CodeGroup>
+```javascript Node.js (Express)
+const crypto = require("crypto");
 
-```bash curl
-curl --request GET \
-  --url https://api.ndapi.io/v1/webhooks \
-  --header 'Authorization: Bearer YOUR_API_KEY'
-```
+app.post("/ndapi/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const expected = crypto
+    .createHmac("sha256", process.env.NDAPI_WEBHOOK_SECRET)
+    .update(req.body)            // Buffer of the raw body
+    .digest("base64");
 
-```javascript Node.js
-const response = await fetch('https://api.ndapi.io/v1/webhooks', {
-  headers: {
-    Authorization: 'Bearer YOUR_API_KEY',
-  },
+  const received = req.headers["x-ndapi-signature"] || "";
+  const valid = expected.length === received.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  if (!valid) return res.status(401).json({ error: "Invalid signature" });
+
+  const { event, data } = JSON.parse(req.body.toString("utf8"));
+  // handle the event...
+  res.json({ received: true });
 });
-
-const { status, data } = await response.json();
-console.log(`You have ${data.length} registered webhook(s)`);
 ```
 
+```python Python (Flask)
+import base64, hashlib, hmac, json, os
+from flask import request, jsonify
+
+@app.post("/ndapi/webhook")
+def ndapi_webhook():
+    raw = request.get_data()  # raw bytes, exactly as received
+    expected = base64.b64encode(
+        hmac.new(os.environ["NDAPI_WEBHOOK_SECRET"].encode(), raw, hashlib.sha256).digest()
+    ).decode()
+    received = request.headers.get("x-ndapi-signature", "")
+    if not hmac.compare_digest(expected, received):
+        return jsonify(error="Invalid signature"), 401
+
+    body = json.loads(raw)
+    # handle body["event"], body["data"]...
+    return jsonify(received=True)
+```
+
+```php PHP
+<?php
+$raw = file_get_contents('php://input');
+$expected = base64_encode(hash_hmac('sha256', $raw, getenv('NDAPI_WEBHOOK_SECRET'), true));
+$received = $_SERVER['HTTP_X_NDAPI_SIGNATURE'] ?? '';
+
+if (!hash_equals($expected, $received)) {
+    http_response_code(401);
+    exit(json_encode(['error' => 'Invalid signature']));
+}
+
+$body = json_decode($raw, true);
+// handle $body['event'], $body['data']...
+echo json_encode(['received' => true]);
+```
 </CodeGroup>
 
-```json Sample response
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "wh_01HDEF321",
-      "url": "https://yourapp.example.com/webhooks/ndapi",
-      "events": ["virtual_account.credited", "transfer.success", "transfer.failed"],
-      "status": "active",
-      "created_at": "2024-01-15T10:00:00Z"
-    }
-  ]
-}
-```
+## Retries
 
-<Note>
-  The webhook `secret` is **not** returned by the list endpoint for security reasons. If you lose your secret, you can rotate it from the [NDAPI dashboard](https://dashboard.ndapi.io/webhooks) or by calling `POST /webhooks/:id/rotate-secret`. Remember to update your environment variable after rotation.
-</Note>
+A delivery fails if your endpoint returns a non-2xx status or doesn't respond within 10 seconds. NDAPI then retries:
+
+| Attempt | When |
+| --- | --- |
+| 1st | Immediately |
+| 2nd | 5 minutes later |
+| 3rd | 30 minutes later |
+| 4th | 2 hours later |
+| 5th | 24 hours later |
+
+## Best practices
+
+- Respond with `200` quickly and do heavy work in the background.
+- Deduplicate on `transaction_id` or `reference`; the same event can arrive twice.
+- Handle `transfer.failed` so your records match your restored balance.
+- Test every event with the [simulator](/api-reference/webhooks) before going live.
+
+See all events and payloads in [Webhook Events](/concepts/webhooks).

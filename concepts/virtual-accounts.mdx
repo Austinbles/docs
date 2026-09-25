@@ -1,105 +1,29 @@
 ---
-title: "Virtual Accounts: Dedicated Payment Accounts for Customers"
-sidebarTitle: "Virtual Accounts"
-description: "Virtual accounts give each of your customers a dedicated bank account number for collecting payments. Understand how they work in NDAPI."
+title: "Virtual Accounts"
+description: "Give each customer or transaction its own account number for collecting payments."
 ---
 
-A virtual account in NDAPI is a unique bank account number provisioned on behalf of one of your customers, backed by a real bank in a supported market. When your customer shares their virtual account number with a payer, any funds sent to that number are automatically detected, reconciled, and surfaced to you via webhooks and transaction records — with no manual intervention required on your part. This makes virtual accounts the foundation for building reliable, scalable payment collection flows across Africa.
+A virtual account is a real bank account number that routes payments into your NDAPI balance. When a customer pays into it, NDAPI credits your balance and sends a `payment.received` webhook carrying your reference.
 
-## How Virtual Accounts Work
+## Permanent and dynamic accounts
 
-When you create a virtual account, NDAPI assigns a real bank account number from one of our banking partners in the relevant market. That account number is permanently associated with the customer reference you provide. Every inbound payment — regardless of the sender's bank or transfer method — triggers two things:
+| Type | Expiry | Best for |
+| --- | --- | --- |
+| Permanent | Never expires | Wallet funding, recurring payments, one account per customer |
+| Dynamic | Expires at `expires_at` | One-time payments, checkout, P2P trades |
 
-1. A `virtual_account.credited` webhook event is dispatched to your registered endpoint.
-2. A `credit` transaction is recorded against the virtual account in your NDAPI ledger.
+Leave `expires_at` empty for a permanent account.
 
-This means you always have both a real-time notification and a durable audit trail for every payment your customers receive.
+## Account name
 
-## Virtual Account Lifecycle
+The account name includes your business name: `{your business name}/{account_name}`, for example `YourBusiness/John Doe`. Customers see it in their banking app before paying.
 
-A virtual account moves through a defined set of states from the moment it is provisioned to the moment it is decommissioned.
+## Matching payments
 
-| State | Description |
-|---|---|
-| `created` | The account has been provisioned and account number assigned, but is not yet active. |
-| `active` | The account is live and ready to receive inbound payments. |
-| `suspended` | The account is temporarily disabled. Inbound payments are rejected. |
-| `closed` | The account is permanently deactivated. It cannot be reopened. |
+Set `merchant_tx_ref` to your own order or customer ID. NDAPI returns it as `reference` in every webhook and transaction record, so you always know where a payment belongs.
 
-<Note>
-  State transitions are one-directional for `closed` accounts. Once a virtual account is closed, it cannot be moved back to `active` or `suspended`. If you need to temporarily pause a customer's ability to receive payments, use `suspended` instead.
-</Note>
+## Expected amount
 
-## Virtual Account Object
+`expected_amount` is optional and informational. If the customer sends a different amount, the payment is still accepted and your balance is credited with the amount actually received. Always credit your customer from the webhook's `net_amount`, never from the amount you expected.
 
-The following fields are returned whenever you create, retrieve, or list virtual accounts through the NDAPI API.
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Unique identifier for the virtual account, prefixed with `va_`. |
-| `account_number` | string | The bank account number assigned to this virtual account. |
-| `account_name` | string | The account holder name registered with the bank. |
-| `bank_name` | string | Human-readable name of the issuing bank. |
-| `bank_code` | string | Numeric or alphanumeric code identifying the issuing bank. |
-| `currency` | string | ISO 4217 currency code for the account (e.g. `NGN`, `KES`). |
-| `status` | string | Current lifecycle state: `active`, `suspended`, or `closed`. |
-| `customer_name` | string | Full name of the customer this account belongs to. |
-| `customer_email` | string | Email address of the customer this account belongs to. |
-| `reference` | string | Your own internal reference, passed at creation time. Used for reconciliation on your side. |
-| `created_at` | string | ISO 8601 timestamp recording when the account was provisioned. |
-
-A complete virtual account object looks like this:
-
-```json
-{
-  "id": "va_01HXYZ456ABC",
-  "account_number": "0123456789",
-  "account_name": "NDAPI / Amara Nwosu",
-  "bank_name": "First Bank of Nigeria",
-  "bank_code": "011",
-  "currency": "NGN",
-  "status": "active",
-  "customer_name": "Amara Nwosu",
-  "customer_email": "amara.nwosu@example.com",
-  "reference": "CUST-0042",
-  "created_at": "2024-01-15T08:00:00Z"
-}
-```
-
-## Supported Currencies
-
-Virtual accounts can be provisioned in the following currencies, each backed by a local banking partner in the corresponding market:
-
-<CardGroup cols={2}>
-  <Card title="NGN — Nigerian Naira" icon="building-columns">
-    Issued via Nigerian commercial banks. Supports instant NIBSS transfers and standard NIP inflows.
-  </Card>
-  <Card title="GHS — Ghanaian Cedi" icon="building-columns">
-    Issued via Ghanaian licensed banks. Supports GIP and local interbank transfers.
-  </Card>
-  <Card title="KES — Kenyan Shilling" icon="building-columns">
-    Issued via Kenyan licensed banks. Supports Pesalink and local bank transfers.
-  </Card>
-  <Card title="ZAR — South African Rand" icon="building-columns">
-    Issued via South African licensed banks. Supports EFT and RTC payment rails.
-  </Card>
-</CardGroup>
-
-## Per-Account Limits
-
-<Note>
-  As an operator, you can configure spending and collection limits on a per-virtual-account basis. This lets you enforce compliance thresholds, tier your product offerings, or cap exposure for specific customer segments. Limits can be set at creation time via the `limits` object or updated at any point while the account is `active` or `suspended`. Contact your NDAPI account manager or visit the [NDAPI Dashboard](https://dashboard.ndapi.io) to configure default limits for all newly created accounts under your operator profile.
-</Note>
-
-## What's Next
-
-Once you understand the virtual account model, you're ready to start provisioning accounts for your customers.
-
-<CardGroup cols={2}>
-  <Card title="Create a Virtual Account" icon="plus" href="/guides/create-virtual-account">
-    Step-by-step guide to provisioning your first virtual account via the API.
-  </Card>
-  <Card title="Handle Webhooks" icon="bolt" href="/guides/handle-webhooks">
-    Learn how to receive and verify real-time notifications for inbound payments.
-  </Card>
-</CardGroup>
+See the [Virtual Accounts API](/api-reference/virtual-accounts).
