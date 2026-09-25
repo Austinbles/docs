@@ -13,10 +13,10 @@ Fetch supported banks and their codes with [`GET /banks`](/api-reference/transfe
 curl -X POST https://api.nolubz.com/v1/virtual-accounts/verify \
   -H "x-api-key: NDAPI-LIVE-your_live_key" \
   -H "Content-Type: application/json" \
-  -d '{ "account_number": "0123456789", "bank_code": "058" }'
+  -d '{ "account_number": "0123456789", "bank_code": "BANK_CODE" }'
 ```
 
-Show the returned `data.account_name` to your user and get confirmation before sending.
+Replace `BANK_CODE` with the code for the recipient's bank from `GET /banks`. Show the returned `data.account_name` to your user and get confirmation before sending.
 
 ## 2. Send the transfer
 
@@ -34,7 +34,7 @@ const res = await fetch("https://api.nolubz.com/v1/transfers", {
   },
   body: JSON.stringify({
     amount: 50000,
-    bank_code: "058",
+    bank_code: "BANK_CODE",
     account_number: "0123456789",
     account_name: "JANE SMITH",
     reference,

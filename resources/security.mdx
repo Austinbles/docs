@@ -1,0 +1,64 @@
+---
+title: "Security"
+description: "How NDAPI protects your money, your data and your integration, and what you need to do on your side."
+---
+
+NDAPI is built as a record system first. Money only moves through the ledger, every movement is recorded, and every request is checked before anything happens. This page explains the protections NDAPI applies and the steps your integration should take.
+
+## How NDAPI protects your account
+
+| Protection | What it means for you |
+| --- | --- |
+| **Immutable ledger** | Every deposit, transfer and fee is written as a ledger entry. Balances are calculated from those entries, never edited directly. |
+| **Idempotent requests** | A transfer `reference` can only be processed once. Retrying a request never creates a second transaction. |
+| **Signed webhooks** | Every webhook is signed with your webhook secret, so you can prove it came from NDAPI. |
+| **IP allow-listing** | Requests can be restricted to the server IP addresses you register. Requests from anywhere else are rejected. |
+| **Separate test and live keys** | Test keys can never move real money, and test data never mixes with live data. |
+| **Gateway-only access** | NDAPI is only reachable through `https://api.nolubz.com/v1`, over HTTPS. |
+| **Audit trail** | Administrative actions on your account are logged and cannot be edited or erased. |
+
+## Your responsibilities
+
+<Steps>
+  <Step title="Keep your keys on your server">
+    Store your API keys and webhook secret in environment variables or a secrets manager. Never put them in mobile apps, browser code, public repositories, screenshots or support emails.
+  </Step>
+  <Step title="Register your server IP addresses">
+    Send the public IP addresses of the servers that call NDAPI through [operator support](https://ndapi.nolubz.com/support). Tell us before you change hosting or add servers.
+  </Step>
+  <Step title="Verify every webhook">
+    Check the `x-ndapi-signature` header against the raw request body before acting on any webhook. See [Handle webhooks](/guides/handle-webhooks).
+  </Step>
+  <Step title="Use a unique reference for every transfer">
+    Generate the reference before calling the API and store it, so a retry reuses the same value. See [Error handling](/guides/error-handling).
+  </Step>
+  <Step title="Verify recipients before paying">
+    Look up the account name with [Verify Account](/api-reference/virtual-accounts#verify-a-bank-account) and confirm it with your user before every transfer.
+  </Step>
+  <Step title="Reconcile daily">
+    Compare your records with [`GET /transactions`](/api-reference/transactions) at least once a day, and investigate any difference.
+  </Step>
+</Steps>
+
+## If a key is exposed
+
+<Warning>
+  If you believe an API key or your webhook secret has been seen by anyone who shouldn't have it, contact [operator support](https://ndapi.nolubz.com/support) immediately. We will issue new credentials and disable the old ones.
+</Warning>
+
+Until the new key is active:
+
+1. Stop using the exposed key in any new deployments
+2. Check [`GET /transactions`](/api-reference/transactions) for any activity you don't recognise
+3. Confirm your registered IP addresses are still correct
+
+## Operator Portal security
+
+- Portal sessions expire after 8 hours
+- After 5 failed sign-in attempts in 15 minutes, sign-in for that email is paused for 15 minutes
+- Changing your password signs out every other session on your account
+- The portal only ever shows your own account's data
+
+## Reporting a security issue
+
+If you find a vulnerability in NDAPI, report it privately through [operator support](https://ndapi.nolubz.com/support) with the subject **Security report**. Please don't disclose it publicly until we've confirmed a fix.

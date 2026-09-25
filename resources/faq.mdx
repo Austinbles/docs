@@ -1,0 +1,64 @@
+---
+title: "Frequently Asked Questions"
+description: "Answers to the questions operators ask most often."
+---
+
+<AccordionGroup>
+  <Accordion title="How do I get access to NDAPI?">
+    Fill in the [Request access form](https://ndapi.nolubz.com/get-access). Our team replies within one business day, then you sign the service agreement and receive your test key, live key and webhook secret.
+  </Accordion>
+
+  <Accordion title="How much does NDAPI cost?">
+    Fees are agreed individually with each business during onboarding, and there are no setup costs. Existing operators can ask about pricing through [operator support](https://ndapi.nolubz.com/support).
+  </Accordion>
+
+  <Accordion title="Do test and live use different URLs?">
+    No. Both use `https://api.nolubz.com/v1`. Your key decides the mode: `NDAPI-TEST-` for test, `NDAPI-LIVE-` for live.
+  </Accordion>
+
+  <Accordion title="Which banks can I pay out to?">
+    Commercial, merchant, microfinance and fintech banks. Get the current list and exact codes from [`GET /banks`](/api-reference/transfers#bank-codes). Always use codes from that endpoint rather than hard-coding them.
+  </Accordion>
+
+  <Accordion title="Does the recipient receive the full transfer amount?">
+    Yes. The recipient receives the full `amount`. NDAPI charges are taken from your balance on top, shown as `total_deducted`. See [Transfers](/concepts/transfers).
+  </Accordion>
+
+  <Accordion title="What if a customer pays a different amount than expected?">
+    The payment is accepted and your balance is credited with what was actually received. Always credit your customer from the webhook's `net_amount`.
+  </Accordion>
+
+  <Accordion title="Can I reuse a virtual account?">
+    Yes. Leave `expires_at` empty for a permanent account (ideal for one account per customer), or set it for a single-use account per order. Sending the same `merchant_tx_ref` again returns the existing account instead of creating a new one.
+  </Accordion>
+
+  <Accordion title="I didn't receive a webhook. What should I do?">
+    Check that your endpoint is public, uses HTTPS, returns `200` within 10 seconds, and isn't blocked by a firewall. Then look the transaction up by your reference with [`GET /transactions?reference=...`](/api-reference/transactions). Don't filter webhooks by IP address; verify the signature instead.
+  </Accordion>
+
+  <Accordion title="My webhook signature doesn't match.">
+    Compute the signature over the **raw request body exactly as received**, before parsing the JSON. Re-serialising parsed JSON changes the bytes. See [Handle webhooks](/guides/handle-webhooks) for working examples in Node.js, Python and PHP.
+  </Accordion>
+
+  <Accordion title="A transfer request timed out. Did the money go?">
+    Retry with the **same** reference. If it was already processed you'll get `409` with the original transaction and its status; if not, it's processed now. It is never processed twice.
+  </Accordion>
+
+  <Accordion title="I'm getting 'IP address not permitted'.">
+    The request came from an IP address that isn't registered for your account. Send your server's public IP addresses through [operator support](https://ndapi.nolubz.com/support), especially after changing hosting.
+  </Accordion>
+
+  <Accordion title="How do I get new API keys or a new webhook secret?">
+    Contact [operator support](https://ndapi.nolubz.com/support). If you think a key has been exposed, say so in your message and we'll prioritise it. See [Security](/resources/security).
+  </Accordion>
+
+  <Accordion title="Can I use one webhook URL for collections and another for payouts?">
+    Yes. `transfer.*` events can go to a separate transfer webhook URL, while everything else goes to your main webhook URL. Ask [operator support](https://ndapi.nolubz.com/support) to set it.
+  </Accordion>
+
+  <Accordion title="Which markets are supported?">
+    Nigeria is live today. More markets are on the way; [tell us](https://ndapi.nolubz.com/get-access) which ones you need.
+  </Accordion>
+</AccordionGroup>
+
+Still stuck? Existing operators can reach us through [operator support](https://ndapi.nolubz.com/support).

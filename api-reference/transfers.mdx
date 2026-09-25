@@ -14,7 +14,7 @@ description: "Send bank transfers from your NDAPI balance."
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `amount` | number | Yes | Amount the recipient receives, in full. |
-| `bank_code` | string | Yes | Recipient bank code. See [bank codes](#bank-codes). |
+| `bank_code` | string | Yes | Recipient bank code from [`GET /banks`](#bank-codes). Examples on this page use `BANK_CODE` as a placeholder. |
 | `account_number` | string | Yes | Recipient account number |
 | `account_name` | string | Yes | Recipient account name, from Verify Account |
 | `reference` | string | Yes | Your unique reference. Used for idempotency. |
@@ -28,7 +28,7 @@ curl -X POST https://api.nolubz.com/v1/transfers \
   -H "Content-Type: application/json" \
   -d '{
     "amount": 50000,
-    "bank_code": "058",
+    "bank_code": "BANK_CODE",
     "account_number": "0123456789",
     "account_name": "JANE SMITH",
     "reference": "PAYOUT-2026-001",
@@ -45,7 +45,7 @@ const res = await fetch("https://api.nolubz.com/v1/transfers", {
   },
   body: JSON.stringify({
     amount: 50000,
-    bank_code: "058",
+    bank_code: "BANK_CODE",
     account_number: "0123456789",
     account_name: "JANE SMITH",
     reference: "PAYOUT-2026-001",
@@ -92,7 +92,7 @@ Get the full, current list of supported banks and their codes from the API. It c
 | `search` | No | Filter by bank name, for example `opay` |
 
 ```bash
-curl "https://api.nolubz.com/v1/banks?search=nom" \
+curl "https://api.nolubz.com/v1/banks?search=bank" \
   -H "x-api-key: NDAPI-LIVE-your_live_key"
 ```
 
@@ -101,9 +101,10 @@ curl "https://api.nolubz.com/v1/banks?search=nom" \
   "success": true,
   "data": {
     "country": "NG",
-    "count": 1,
+    "count": 2,
     "banks": [
-      { "code": "090645", "name": "Nombank" }
+      { "code": "<bank_code>", "name": "Example Commercial Bank" },
+      { "code": "<bank_code>", "name": "Example Microfinance Bank" }
     ]
   }
 }

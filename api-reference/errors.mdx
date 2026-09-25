@@ -18,7 +18,7 @@ Errors return a JSON body with an `error` message:
 | 403 | Forbidden | Request from an IP address not registered for your account |
 | 404 | Not Found | Wrong endpoint URL |
 | 409 | Conflict | Duplicate reference; the response includes the original transaction |
-| 429 | Too Many Requests | Rate limit exceeded; see `Retry-After` |
+| 429 | Too Many Requests | Too many attempts in a short time (for example, Operator Portal sign-in) |
 | 500 | Server Error | Temporary problem; retry after a few seconds |
 
 ## Common messages

@@ -42,7 +42,7 @@ A `409` means the new request was **rejected**; the original transaction stands.
 | Situation | Retry? |
 | --- | --- |
 | Timeout, `500` | Yes, with the same reference and exponential backoff |
-| `429` | Yes, after the `Retry-After` seconds |
+| `429` | Yes, after waiting a few minutes |
 | `400`, `401`, `403`, `404` | No. Fix the request first |
 | `409` | No. Read the original transaction's status |
 

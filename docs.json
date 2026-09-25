@@ -15,12 +15,12 @@
   "favicon": "/favicon.png",
   "appearance": {
     "default": "dark",
-    "strict": true
+    "strict": false
   },
   "background": {
     "color": {
       "dark": "#070B16",
-      "light": "#070B16"
+      "light": "#FFFFFF"
     }
   },
   "navbar": {

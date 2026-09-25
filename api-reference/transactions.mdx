@@ -15,9 +15,75 @@ description: "List your transactions or look one up by reference."
 
 ## List transactions
 
-```bash
+<CodeGroup>
+```bash cURL
 curl "https://api.nolubz.com/v1/transactions?period=month&type=deposit&page=1" \
   -H "x-api-key: NDAPI-LIVE-your_live_key"
+```
+
+```javascript Node.js
+const params = new URLSearchParams({ period: "month", type: "deposit", page: "1" });
+const res = await fetch(`https://api.nolubz.com/v1/transactions?${params}`, {
+  headers: { "x-api-key": process.env.NDAPI_API_KEY },
+});
+const { data } = await res.json();
+console.log(data.summary, data.transactions);
+```
+
+```python Python
+import os, requests
+
+resp = requests.get(
+    "https://api.nolubz.com/v1/transactions",
+    headers={"x-api-key": os.environ["NDAPI_API_KEY"]},
+    params={"period": "month", "type": "deposit", "page": 1},
+)
+data = resp.json()["data"]
+```
+
+```php PHP
+<?php
+$q = http_build_query(['period' => 'month', 'type' => 'deposit', 'page' => 1]);
+$ch = curl_init("https://api.nolubz.com/v1/transactions?$q");
+curl_setopt_array($ch, [
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_HTTPHEADER => ['x-api-key: ' . getenv('NDAPI_API_KEY')],
+]);
+$data = json_decode(curl_exec($ch), true)['data'];
+```
+</CodeGroup>
+
+```json Response
+{
+  "success": true,
+  "mode": "live",
+  "data": {
+    "period": "month",
+    "currency": "<currency_code>",
+    "summary": {
+      "total_deposits": 150000,
+      "total_withdrawals": 50000,
+      "total_fees": "<as per your agreement>",
+      "transaction_count": 12,
+      "note": "Totals cover the transactions on this page."
+    },
+    "transactions": [
+      {
+        "transaction_id": 42,
+        "type": "deposit",
+        "amount": 50000,
+        "fee": "<as per your agreement>",
+        "net_amount": "<amount minus fee>",
+        "currency": "<currency_code>",
+        "status": "completed",
+        "reference": "ORDER-2026-001",
+        "account_number": "9646780657",
+        "created_at": "2026-09-13T10:00:00Z"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 50, "total": 12, "total_pages": 1 }
+  }
+}
 ```
 
 ## Look up by reference
@@ -26,6 +92,27 @@ curl "https://api.nolubz.com/v1/transactions?period=month&type=deposit&page=1" \
 curl "https://api.nolubz.com/v1/transactions?reference=ORDER-2026-001" \
   -H "x-api-key: NDAPI-LIVE-your_live_key"
 ```
+
+```json Response
+{
+  "success": true,
+  "data": {
+    "transaction": {
+      "transaction_id": 42,
+      "type": "deposit",
+      "amount": 50000,
+      "fee": "<as per your agreement>",
+      "net_amount": "<amount minus fee>",
+      "currency": "<currency_code>",
+      "status": "completed",
+      "reference": "ORDER-2026-001",
+      "created_at": "2026-09-13T10:00:00Z"
+    }
+  }
+}
+```
+
+If no transaction matches, you get HTTP `404` with `"Transaction not found"`.
 
 Use this to reconcile if you missed a webhook. Test keys only see test transactions, and live keys only see live ones.
 

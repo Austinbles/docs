@@ -1,6 +1,6 @@
 ---
 title: "API Overview"
-description: "Base URL, request format, responses and rate limits."
+description: "Base URL, request format, responses and fair use."
 ---
 
 ## Base URL
@@ -40,22 +40,6 @@ Successful responses look like this:
 
 Errors return an `error` message and a matching HTTP status. See [Errors](/api-reference/errors).
 
-## Rate limits
+## Fair use
 
-Limits apply per API key.
-
-| Endpoint | Limit per minute |
-| --- | --- |
-| `POST /virtual-accounts` | 300 |
-| `POST /transfers` | 60 |
-| `GET /balance` | 120 |
-| `GET /transactions` | 120 |
-| `POST /simulate` | 30 (test only) |
-
-Over the limit, you get HTTP `429` with a `Retry-After` header in seconds:
-
-```json
-{ "error": "Rate limit exceeded", "retry_after": 60, "limit": "60 requests per minute" }
-```
-
-Contact us if you need higher limits.
+NDAPI is built for high volumes. Keep requests to what your integration needs: cache the bank list, rely on webhooks instead of polling, and look up single transactions by reference. If you expect large bursts (for example, bulk payouts), tell us in advance through [operator support](https://ndapi.nolubz.com/support) so we can plan capacity with you.

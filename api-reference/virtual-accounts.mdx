@@ -69,12 +69,45 @@ Look up the account name before sending a transfer.
 | `account_number` | string | Yes | Recipient account number |
 | `bank_code` | string | Yes | Recipient bank code. See [bank codes](/api-reference/transfers#bank-codes). |
 
-```bash
+<CodeGroup>
+```bash cURL
 curl -X POST https://api.nolubz.com/v1/virtual-accounts/verify \
   -H "x-api-key: NDAPI-LIVE-your_live_key" \
   -H "Content-Type: application/json" \
-  -d '{ "account_number": "0123456789", "bank_code": "058" }'
+  -d '{ "account_number": "0123456789", "bank_code": "BANK_CODE" }'
 ```
+
+```javascript Node.js
+const res = await fetch("https://api.nolubz.com/v1/virtual-accounts/verify", {
+  method: "POST",
+  headers: { "x-api-key": process.env.NDAPI_API_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({ account_number: "0123456789", bank_code: "BANK_CODE" }),
+});
+const { data } = await res.json();
+console.log(data.account_name);
+```
+
+```python Python
+resp = requests.post(
+    "https://api.nolubz.com/v1/virtual-accounts/verify",
+    headers={"x-api-key": os.environ["NDAPI_API_KEY"]},
+    json={"account_number": "0123456789", "bank_code": "BANK_CODE"},
+)
+print(resp.json()["data"]["account_name"])
+```
+
+```php PHP
+<?php
+$ch = curl_init('https://api.nolubz.com/v1/virtual-accounts/verify');
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_HTTPHEADER => ['x-api-key: ' . getenv('NDAPI_API_KEY'), 'Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode(['account_number' => '0123456789', 'bank_code' => 'BANK_CODE']),
+]);
+$name = json_decode(curl_exec($ch), true)['data']['account_name'];
+```
+</CodeGroup>
 
 ```json Response
 {
@@ -82,7 +115,7 @@ curl -X POST https://api.nolubz.com/v1/virtual-accounts/verify \
   "data": {
     "account_name": "JANE SMITH",
     "account_number": "0123456789",
-    "bank_code": "058"
+    "bank_code": "BANK_CODE"
   }
 }
 ```

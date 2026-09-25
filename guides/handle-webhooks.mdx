@@ -79,17 +79,13 @@ echo json_encode(['received' => true]);
 ```
 </CodeGroup>
 
-## Retries
+## If a delivery fails
 
-A delivery fails if your endpoint returns a non-2xx status or doesn't respond within 10 seconds. NDAPI then retries:
+A delivery fails if your endpoint returns a non-2xx status or doesn't respond within 10 seconds. The failure is recorded on the transaction, so nothing is lost:
 
-| Attempt | When |
-| --- | --- |
-| 1st | Immediately |
-| 2nd | 5 minutes later |
-| 3rd | 30 minutes later |
-| 4th | 2 hours later |
-| 5th | 24 hours later |
+- Look up any order you haven't received a webhook for with [`GET /transactions?reference=...`](/api-reference/transactions)
+- Reconcile at least once a day against [`GET /transactions`](/api-reference/transactions)
+- Fix the cause (firewall, certificate, slow handler) and test again with the [simulator](/guides/testing)
 
 ## Best practices
 

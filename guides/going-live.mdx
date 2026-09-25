@@ -1,0 +1,50 @@
+---
+title: "Going Live Checklist"
+description: "Everything to confirm before you switch from your test key to your live key."
+---
+
+Work through this list before your first live transaction. Each item prevents a problem we see in real integrations.
+
+## Account and access
+
+- [ ] Your **service agreement** is signed and you've received your `NDAPI-LIVE-` key
+- [ ] Your **production server IP addresses** are registered with us through [operator support](https://ndapi.nolubz.com/support)
+- [ ] Your **webhook URL** for production is set, uses `https://`, and is publicly reachable
+- [ ] If you separate payouts from collections, your **transfer webhook URL** is set too
+
+## Keys and secrets
+
+- [ ] The live key and webhook secret are stored in **environment variables or a secrets manager**, not in code
+- [ ] Nothing in your mobile app or website front end contains a key
+- [ ] Test and live keys are kept apart, and production uses only the live key
+
+## Webhooks
+
+- [ ] Your endpoint **verifies `x-ndapi-signature`** over the raw request body and rejects anything that doesn't match
+- [ ] Your endpoint **responds with `200` within 10 seconds** and does heavy work in the background
+- [ ] Your handler is **idempotent**: the same `transaction_id` or `reference` is never processed twice
+- [ ] You handle `payment.received`, `transfer.success`, `transfer.failed` and `account.suspended`
+
+## Collections
+
+- [ ] Each virtual account has your own `merchant_tx_ref`, saved against the order or customer
+- [ ] You credit customers from the webhook's **`net_amount`**, not from the amount you expected
+- [ ] Payments of a different amount than expected are handled (they are accepted and credited as received)
+
+## Payouts
+
+- [ ] You **verify the account name** before every transfer and show it to your user
+- [ ] Every transfer has a **unique reference**, saved **before** the API call
+- [ ] Your balance check allows for `total_deducted` (amount plus fees)
+- [ ] Timeouts and `5xx` errors are retried with the **same** reference; `409` is treated as "already processed"
+- [ ] Pending transfers wait for `transfer.success` or `transfer.failed`
+
+## Operations
+
+- [ ] Someone on your team receives `balance.low` alerts and can top up quickly
+- [ ] You reconcile your records against [`GET /transactions`](/api-reference/transactions) daily
+- [ ] Your team knows how to reach [operator support](https://ndapi.nolubz.com/support), including the transaction reference in every request
+
+<Tip>
+  Start with a small live transaction end to end (collect, receive the webhook, pay out) before opening to all your users.
+</Tip>

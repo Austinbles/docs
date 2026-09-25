@@ -1,0 +1,26 @@
+---
+title: "Changelog"
+description: "Changes to the NDAPI API and platform, newest first."
+---
+
+<Update label="24 September 2026" description="Platform and API update">
+  **New**
+  - [`GET /banks`](/api-reference/transfers#bank-codes) returns the live list of supported banks and their exact codes, with optional `?search=`
+  - [`POST /virtual-accounts/verify`](/api-reference/virtual-accounts#verify-a-bank-account) looks up the account name for any account number before you pay
+  - Currency-neutral amount fields on every response and webhook: `amount`, `fee`, `net_amount`, `currency`, and `provider_ref` for the payment rail reference
+
+  **Changed**
+  - **Transfers:** the recipient now receives the full `amount`. Fees are taken from your balance on top and reported as `total_deducted`
+  - **Create virtual account** accepts `account_name`, `merchant_tx_ref`, `expected_amount` and `expires_at`; earlier parameter names still work
+  - **Transactions:** test keys see only test transactions and live keys see only live ones; `period=all` is supported; `limit` is capped at 100
+  - **Errors** no longer include payment-rail internals, and insufficient-balance errors show your account currency
+  - **Operator Portal:** secure 8-hour sessions, sign-in throttling, and your own data only
+  - Documentation moved to **ndapi.nolubz.com/docs**
+
+  **Deprecated**
+  - The earlier currency-suffixed amount fields are still returned for compatibility, but new integrations should use the currency-neutral fields. We'll announce a removal date in advance.
+</Update>
+
+<Update label="September 2026" description="NDAPI v1">
+  - First release: virtual accounts, transfers, transactions, balance, signed webhooks and the webhook simulator
+</Update>

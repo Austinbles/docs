@@ -40,7 +40,7 @@ You can use one URL for everything, or separate collections from payouts:
 | `transfer.*` | `webhook_url_transfer` if set, otherwise `webhook_url` |
 | `balance.*`, `account.*`, reports | `webhook_url` |
 
-Both URLs use the same webhook secret, and retries run independently per URL. Contact us to set `webhook_url_transfer`.
+Both URLs use the same webhook secret. Ask [operator support](https://ndapi.nolubz.com/support) to set `webhook_url_transfer`.
 
 ## Payloads
 
@@ -151,6 +151,7 @@ Both URLs use the same webhook secret, and retries run independently per URL. Co
 ## Delivery guarantees
 
 - A completed transaction is never pushed again after you acknowledge it.
-- If delivery fails, NDAPI retries. Your handler may still see an event more than once, so deduplicate on `transaction_id` or `reference`.
+- If your endpoint doesn't answer with `200`, the failed delivery is recorded on the transaction. Reconcile with [`GET /transactions`](/api-reference/transactions).
+- Your handler may still see an event more than once, so deduplicate on `transaction_id` or `reference`.
 
 See [Handle webhooks](/guides/handle-webhooks) for signature verification and retries.

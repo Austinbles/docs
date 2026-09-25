@@ -1,0 +1,123 @@
+---
+title: "Testing Your Integration"
+description: "How test mode works, how to fire every webhook event on demand, and what to test before going live."
+---
+
+Test mode lets you build and test your full integration before any real money moves. Use your `NDAPI-TEST-` key with the same base URL, `https://api.nolubz.com/v1`.
+
+## What happens in test mode
+
+| Action | Test mode behaviour |
+| --- | --- |
+| Create a virtual account | Returns a test account number starting with `TEST` and bank `Test Bank`. No real account is created. |
+| Real payments into test accounts | Not possible. Use the simulator to fire `payment.received`. |
+| Send a transfer | Returns `status: completed` straight away. No money moves and no transaction is recorded. |
+| Verify a bank account | Performs a **real** account-name lookup. |
+| List banks | Returns the **real** list of supported banks. |
+| List transactions | Returns only test transactions, including simulated ones. |
+| Balance | Returns your balance; stats count only test transactions. |
+
+<Note>
+  Test keys only ever see test data, and live keys only ever see live data.
+</Note>
+
+## Fire webhook events with the simulator
+
+`POST /simulate` sends a signed test webhook to your endpoint, exactly as a real event would arrive. It only works with `NDAPI-TEST-` keys.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.nolubz.com/v1/simulate \
+  -H "x-api-key: NDAPI-TEST-your_test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "payment.received",
+    "webhook_url": "https://your-server.com/ndapi/webhook",
+    "params": { "reference": "TEST-ORDER-001", "amount": 10000 }
+  }'
+```
+
+```javascript Node.js
+const res = await fetch("https://api.nolubz.com/v1/simulate", {
+  method: "POST",
+  headers: { "x-api-key": process.env.NDAPI_TEST_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({
+    event: "payment.received",
+    webhook_url: "https://your-server.com/ndapi/webhook",
+    params: { reference: "TEST-ORDER-001", amount: 10000 },
+  }),
+});
+console.log(await res.json());
+```
+
+```python Python
+import os, requests
+
+resp = requests.post(
+    "https://api.nolubz.com/v1/simulate",
+    headers={"x-api-key": os.environ["NDAPI_TEST_KEY"]},
+    json={
+        "event": "payment.received",
+        "webhook_url": "https://your-server.com/ndapi/webhook",
+        "params": {"reference": "TEST-ORDER-001", "amount": 10000},
+    },
+)
+print(resp.json())
+```
+
+```php PHP
+<?php
+$ch = curl_init('https://api.nolubz.com/v1/simulate');
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_HTTPHEADER => ['x-api-key: ' . getenv('NDAPI_TEST_KEY'), 'Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode([
+    'event' => 'payment.received',
+    'webhook_url' => 'https://your-server.com/ndapi/webhook',
+    'params' => ['reference' => 'TEST-ORDER-001', 'amount' => 10000],
+  ]),
+]);
+echo curl_exec($ch);
+```
+</CodeGroup>
+
+The response shows the exact payload sent, the signature method, and how your server answered in `webhook_response`. Simulated webhooks include `"mode": "test"` inside `data`.
+
+### Events you can simulate
+
+| Event | Useful `params` | What to test |
+| --- | --- | --- |
+| `payment.received` | `reference`, `amount`, `account_number` | Your customer is credited once, with `net_amount` |
+| `payment.failed` | `reference`, `account_number` | Your order is marked unpaid or expired |
+| `transfer.success` | `reference`, `amount`, `account_name`, `bank_name` | Your payout is marked complete |
+| `transfer.pending` | `reference`, `amount` | Your payout stays pending until a final event |
+| `transfer.failed` | `reference`, `amount`, `account_number` | Your payout is marked failed and your user is told |
+| `balance.low` | `balance`, `threshold` | Your team is alerted to top up |
+
+Simulated `payment.received`, `transfer.success` and `transfer.pending` events are recorded as test transactions, so you can also test [`GET /transactions?reference=...`](/api-reference/transactions).
+
+## Test these scenarios before going live
+
+<Steps>
+  <Step title="Happy path">
+    Create a virtual account, simulate `payment.received`, and check your customer is credited exactly once.
+  </Step>
+  <Step title="Duplicate webhook">
+    Simulate the same `payment.received` twice with the same `reference`. Your handler must credit only once.
+  </Step>
+  <Step title="Invalid signature">
+    Send a request to your webhook endpoint with a wrong `x-ndapi-signature`. Your server must reject it with `401`.
+  </Step>
+  <Step title="Duplicate transfer">
+    Send the same transfer `reference` twice. The second call must return `409` with the original transaction.
+  </Step>
+  <Step title="Failed payout">
+    Simulate `transfer.failed` and check your records and your user's view update correctly.
+  </Step>
+  <Step title="Timeouts">
+    Make your webhook endpoint slow on purpose and confirm your server still responds within 10 seconds, doing heavy work in the background.
+  </Step>
+</Steps>
+
+When everything passes, work through the [Going live checklist](/guides/going-live).
