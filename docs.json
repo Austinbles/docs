@@ -13,10 +13,26 @@
     "href": "https://ndapi.nolubz.com"
   },
   "favicon": "/favicon.png",
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "background": {
+    "color": {
+      "dark": "#070B16",
+      "light": "#070B16"
+    }
+  },
   "navbar": {
     "links": [
-      { "label": "Request access", "href": "https://ndapi.nolubz.com/get-access" },
-      { "label": "Support", "href": "https://ndapi.nolubz.com/support" }
+      {
+        "label": "Request access",
+        "href": "https://ndapi.nolubz.com/get-access"
+      },
+      {
+        "label": "Support",
+        "href": "https://ndapi.nolubz.com/support"
+      }
     ],
     "primary": {
       "type": "button",
@@ -32,17 +48,35 @@
       {
         "header": "NDAPI",
         "items": [
-          { "label": "Overview", "href": "https://ndapi.nolubz.com" },
-          { "label": "Request access", "href": "https://ndapi.nolubz.com/get-access" },
-          { "label": "Operator Portal", "href": "https://ndapi.nolubz.com/dashboard" }
+          {
+            "label": "Overview",
+            "href": "https://ndapi.nolubz.com"
+          },
+          {
+            "label": "Request access",
+            "href": "https://ndapi.nolubz.com/get-access"
+          },
+          {
+            "label": "Operator Portal",
+            "href": "https://ndapi.nolubz.com/dashboard"
+          }
         ]
       },
       {
         "header": "Help",
         "items": [
-          { "label": "Support", "href": "https://ndapi.nolubz.com/support" },
-          { "label": "Quickstart", "href": "/quickstart" },
-          { "label": "Errors", "href": "/api-reference/errors" }
+          {
+            "label": "Support",
+            "href": "https://ndapi.nolubz.com/support"
+          },
+          {
+            "label": "Quickstart",
+            "href": "/quickstart"
+          },
+          {
+            "label": "Errors",
+            "href": "/api-reference/errors"
+          }
         ]
       }
     ]
@@ -52,16 +86,66 @@
       {
         "tab": "Documentation",
         "groups": [
-          { "group": "Get Started", "pages": ["introduction", "quickstart", "authentication"] },
-          { "group": "Core Concepts", "pages": ["concepts/virtual-accounts", "concepts/transfers", "concepts/transactions", "concepts/webhooks"] },
-          { "group": "Guides", "pages": ["guides/create-virtual-account", "guides/initiate-transfer", "guides/handle-webhooks", "guides/error-handling"] }
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/virtual-accounts",
+              "concepts/transfers",
+              "concepts/transactions",
+              "concepts/webhooks"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/create-virtual-account",
+              "guides/initiate-transfer",
+              "guides/handle-webhooks",
+              "guides/error-handling",
+              "guides/testing",
+              "guides/going-live"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/security",
+              "resources/faq",
+              "resources/changelog"
+            ]
+          }
         ]
       },
       {
         "tab": "API Reference",
         "groups": [
-          { "group": "Overview", "pages": ["api-reference/overview", "api-reference/authentication", "api-reference/errors", "api-reference/pagination"] },
-          { "group": "Endpoints", "pages": ["api-reference/virtual-accounts", "api-reference/transfers", "api-reference/transactions", "api-reference/balance", "api-reference/webhooks"] }
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/authentication",
+              "api-reference/errors",
+              "api-reference/pagination"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api-reference/virtual-accounts",
+              "api-reference/transfers",
+              "api-reference/transactions",
+              "api-reference/balance",
+              "api-reference/webhooks"
+            ]
+          }
         ]
       }
     ]
