@@ -1,0 +1,6 @@
+/* NDAPI docs: extra breathing room between page content and the site footer.
+   Only adds spacing above the footer; the footer itself is unchanged. */
+#footer,
+footer {
+  margin-top: 30vh;
+}
