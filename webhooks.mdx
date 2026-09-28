@@ -1,48 +1,49 @@
 ---
-title: "Webhook Events"
-description: "Every event NDAPI sends, when it fires, and what the payload contains."
+title: "Webhooks"
+description: "Receive real-time notifications for payments, transfers and account events."
 ---
 
-NDAPI sends a signed `POST` request to your webhook URL whenever something happens on your account. Every webhook has the same envelope:
+NDAPI sends signed HTTP POST callbacks to your webhook URL when things happen on your account — a payment is received, a transfer completes or fails, your balance drops low. Your server processes these events and responds to your users in real time.
+
+---
+
+## Setting up your webhook URL
+
+Set your webhook URL in the [Operator Portal](https://ndapi.nolubz.com/dashboard). You can set a separate URL for transfer events if you prefer to route them differently (`webhook_url_transfer`).
+
+Your server must:
+- Accept `POST` requests at the URL.
+- Return **HTTP 200** within **10 seconds**.
+- Verify the signature on every request (see below).
+
+---
+
+## Event types
+
+| Event | When it fires |
+|---|---|
+| `payment.received` | A customer paid into one of your virtual accounts |
+| `transfer.success` | A withdrawal you initiated completed successfully |
+| `transfer.pending` | A withdrawal is accepted by the network but not yet settled |
+| `transfer.failed` | A withdrawal was rejected by the bank |
+| `balance.low` | Your balance dropped below your configured threshold |
+| `balance.zero` | Your balance reached zero |
+| `account.suspended` | Your account has been suspended |
+
+`payment.received`, `transfer.failed` and `account.suspended` are mandatory — they are always sent regardless of your subscription settings.
+
+---
+
+## Payload structure
+
+Every callback shares the same envelope:
 
 ```json
 {
   "event": "payment.received",
-  "data": { }
+  "data": { ... }
 }
 ```
-
-## Events
-
-**Mandatory** events are always delivered. **Optional** events are delivered if you subscribe to them.
-
-| Event | Trigger | Type |
-| --- | --- | --- |
-| `payment.received` | A deposit was credited to your balance | Mandatory |
-| `payment.failed` | A deposit attempt failed or expired | Optional |
-| `transfer.success` | A transfer completed | Optional |
-| `transfer.pending` | A transfer was accepted and is processing | Optional |
-| `transfer.failed` | A transfer failed; balance restored | Mandatory |
-| `balance.low` | Balance dropped below your threshold | Optional |
-| `balance.zero` | Balance reached zero | Optional |
-| `weekly.summary` | Weekly transaction and fee summary | Optional |
-| `monthly.statement` | End-of-month summary | Optional |
-| `account.suspended` | Your operator account was suspended | Mandatory |
-| `account.activated` | Your operator account was reactivated | Optional |
-
-## Two webhook URLs
-
-You can use one URL for everything, or separate collections from payouts:
-
-| Events | Delivered to |
-| --- | --- |
-| `payment.*` | `webhook_url` |
-| `transfer.*` | `webhook_url_transfer` if set, otherwise `webhook_url` |
-| `balance.*`, `account.*`, reports | `webhook_url` |
-
-Both URLs use the same webhook secret, and retries run independently per URL. Contact us to set `webhook_url_transfer`.
-
-## Payloads
 
 ### payment.received
 
@@ -50,107 +51,189 @@ Both URLs use the same webhook secret, and retries run independently per URL. Co
 {
   "event": "payment.received",
   "data": {
-    "reference": "ORDER-2026-001",
-    "amount": 50000,
-    "fee": "<as per your agreement>",
-    "net_amount": "<amount minus fee>",
-    "currency": "<currency_code>",
-    "account_number": "9646780657",
+    "reference": "CO2026...",
+    "amount_ngn": 1000,
+    "provider_fee_ngn": 10,
+    "fee_ngn": 15,
+    "net_amount_ngn": 975,
+    "account_number": "9228703289",
     "transaction_id": 42,
-    "provider_ref": "VACT-TRA-...",
-    "timestamp": "2026-09-13T10:00:00Z"
+    "network_ref": "API-VACT_TRA-...",
+    "timestamp": "2026-09-28T09:55:15Z"
   }
 }
 ```
 
-### payment.failed
+| Field | Description |
+|---|---|
+| `reference` | The `merchant_ref` you provided when creating the virtual account |
+| `amount_ngn` | Gross amount received |
+| `provider_fee_ngn` | Fee charged by the payment network |
+| `fee_ngn` | NDAPI fee per your Service Agreement |
+| `net_amount_ngn` | Amount credited to your NDAPI balance |
+| `account_number` | Virtual account number that received the payment |
+| `transaction_id` | NDAPI transaction ID — use this to look up the transaction via `GET /v1/transactions` |
+| `network_ref` | Payment network reference |
 
-```json
-{
-  "event": "payment.failed",
-  "data": {
-    "reference": "ORDER-2026-001",
-    "account_number": "9646780657",
-    "reason": "Payment expired",
-    "timestamp": "2026-09-22T14:00:00Z"
-  }
-}
-```
-
-### transfer.success
+### transfer.success / transfer.pending / transfer.failed
 
 ```json
 {
   "event": "transfer.success",
   "data": {
-    "reference": "PAYOUT-2026-001",
-    "amount": 50000,
-    "fee": "<as per your agreement>",
-    "provider_fee": "<bank transfer charge>",
-    "net_amount": 50000,
-    "total_deducted": "<amount + fee + provider_fee>",
-    "currency": "<currency_code>",
+    "reference": "your-unique-ref",
+    "amount": 5000,
+    "fee": 25,
+    "provider_fee": 10,
+    "net_amount": 5000,
+    "total_deducted": 5035,
+    "currency": "NGN",
     "account_number": "0123456789",
-    "account_name": "JANE SMITH",
+    "account_name": "John Doe",
     "bank_name": "Access Bank",
-    "transaction_id": 12345,
-    "provider_ref": "TRF-...",
-    "status": "completed",
-    "timestamp": "2026-09-22T14:00:00Z"
-  }
-}
-```
-
-`transfer.pending` has the same shape with `"status": "pending"`.
-
-### transfer.failed
-
-```json
-{
-  "event": "transfer.failed",
-  "data": {
-    "reference": "PAYOUT-2026-001",
-    "amount": 50000,
-    "currency": "<currency_code>",
-    "account_number": "0123456789",
-    "account_name": "JANE SMITH",
-    "error": "Invalid account number",
     "transaction_id": 43,
-    "timestamp": "2026-09-13T10:05:00Z"
+    "status": "completed",
+    "timestamp": "2026-09-28T10:00:00Z"
   }
 }
 ```
 
-### balance.low
+---
 
-```json
-{
-  "event": "balance.low",
-  "data": {
-    "balance": 45000,
-    "threshold": 50000,
-    "currency": "<currency_code>",
-    "timestamp": "2026-09-13T10:10:00Z"
-  }
-}
+## Request headers
+
+Every callback includes these headers:
+
+| Header | Description |
+|---|---|
+| `Content-Type` | `application/json` |
+| `x-ndapi-timestamp` | ISO 8601 timestamp of when the callback was sent |
+| `x-ndapi-signature` | HMAC-SHA256 signature (see Verifying signatures below) |
+
+<Warning>
+If you use a reverse proxy or API gateway in front of your webhook endpoint, you must configure it to **forward all custom headers**, including `x-ndapi-signature` and `x-ndapi-timestamp`. Most gateways strip unrecognised headers by default.
+</Warning>
+
+---
+
+## Verifying signatures
+
+<Warning>
+Always verify the signature before processing a callback. Reject any request with a missing or invalid signature.
+</Warning>
+
+Every callback is signed using your **webhook secret** (visible in your Operator Portal). The signature is:
+
+```
+x-ndapi-signature = Base64(HMAC-SHA256(webhook_secret, raw_request_body))
 ```
 
-### account.suspended
+### Step-by-step
 
-```json
-{
-  "event": "account.suspended",
-  "data": {
-    "operator_name": "Your Business Name",
-    "reason": "Contact ndapi.admin@nolubz.com for details.",
-    "timestamp": "2026-09-13T10:15:00Z"
-  }
+1. Read the **raw request body** before parsing the JSON.
+2. Compute `HMAC-SHA256(webhook_secret, raw_body)`.
+3. Base64-encode the result.
+4. Compare it to the `x-ndapi-signature` header using a constant-time comparison.
+5. Reject the request if it does not match, or if the header is missing.
+
+<Warning>
+Always verify against the **raw body bytes as received**. Re-serialising the parsed JSON can change field order or whitespace, and the signature will not match.
+</Warning>
+
+### Code examples
+
+<CodeGroup>
+
+```javascript Node.js
+const crypto = require('crypto');
+
+function verifySignature(rawBody, signature, secret) {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('base64');
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signature)
+  );
 }
+
+// Express example
+app.post('/webhook/ndapi', express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['x-ndapi-signature'];
+  if (!sig || !verifySignature(req.body, sig, process.env.NDAPI_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  const event = JSON.parse(req.body);
+  // handle event.event ...
+  res.sendStatus(200);
+});
 ```
 
-## Delivery guarantees
+```python Python
+import hmac, hashlib, base64
 
-- A completed transaction is never pushed again after you acknowledge it.
-- If delivery fails, NDAPI retries. Your handler may still see an event more than once, so deduplicate on `transaction_id` or `reference`.
+def verify_signature(raw_body: bytes, signature: str, secret: str) -> bool:
+    expected = base64.b64encode(
+        hmac.new(secret.encode(), raw_body, hashlib.sha256).digest()
+    ).decode()
+    return hmac.compare_digest(expected, signature)
 
-See [Handle webhooks](/guides/handle-webhooks) for signature verification and retries.
+# Flask example
+@app.route('/webhook/ndapi', methods=['POST'])
+def ndapi_webhook():
+    sig = request.headers.get('x-ndapi-signature', '')
+    if not verify_signature(request.get_data(), sig, NDAPI_WEBHOOK_SECRET):
+        return {'error': 'Invalid signature'}, 401
+    event = request.get_json()
+    # handle event['event'] ...
+    return '', 200
+```
+
+```php PHP
+function verifySignature(string $rawBody, string $signature, string $secret): bool {
+    $expected = base64_encode(hash_hmac('sha256', $rawBody, $secret, true));
+    return hash_equals($expected, $signature);
+}
+
+$rawBody  = file_get_contents('php://input');
+$sig      = $_SERVER['HTTP_X_NDAPI_SIGNATURE'] ?? '';
+if (!verifySignature($rawBody, $sig, getenv('NDAPI_WEBHOOK_SECRET'))) {
+    http_response_code(401);
+    exit(json_encode(['error' => 'Invalid signature']));
+}
+$event = json_decode($rawBody, true);
+// handle $event['event'] ...
+http_response_code(200);
+```
+
+</CodeGroup>
+
+---
+
+## Responding to callbacks
+
+Return **HTTP 200** to acknowledge the callback. Any other status code, or no response within 10 seconds, is treated as a failure.
+
+<Info>
+NDAPI retries failed callbacks automatically. Implement idempotency using `transaction_id` or `reference` so that processing a callback twice does not produce duplicate effects.
+</Info>
+
+---
+
+## Replaying a callback
+
+If your server missed a callback or returned an error, you can look up the transaction and reconcile manually:
+
+```
+GET /v1/transactions?reference=your-unique-ref
+```
+
+Contact **ndapi.admin@nolubz.com** if you need a callback replayed for a specific transaction.
+
+---
+
+## Webhook secret rotation
+
+Your webhook secret is shown in the Operator Portal. To rotate it, contact **ndapi.admin@nolubz.com**. After rotation, update your server before the old secret expires.
+
