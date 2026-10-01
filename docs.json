@@ -119,5 +119,7 @@
         ]
       }
     ]
-  }
+  "scripts": [
+  { "src": "/ndapi-chat-widget.js" }
+]
 }
