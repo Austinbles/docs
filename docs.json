@@ -119,7 +119,7 @@
         ]
       }
     ]
-  "scripts": [
-  { "src": "/ndapi-chat-widget.js" }
+ "scripts": [
+  { "src": "https://ndapi-chat.nolubz.com/widget.js" }
 ]
 }
